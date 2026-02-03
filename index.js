@@ -104,87 +104,76 @@ client.on("interactionCreate", async (interaction) => {
     // =====================
     // DROPDOWN → CREATE TICKET
     // =====================
-    
-if (interaction.isStringSelectMenu()) {
-  if (interaction.customId !== "ticket_category") return;
+    if (interaction.isStringSelectMenu()) {
+      if (interaction.customId !== "ticket_category") return;
 
-  const { guild, user } = interaction;
-  const choice = interaction.values[0];
+      const { guild, user } = interaction;
+      const choice = interaction.values[0];
 
-  const cleanName = user.username
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-
-  const ticketNumber = Math.floor(1000 + Math.random() * 9000);
-
-  const supportRole = await guild.roles.fetch(SUPPORT_ROLE_ID);
-
-  const channel = await guild.channels.create({
-    name: `${cleanName}-${ticketNumber}`, // ✅ THIS LINE
-    parent: CATEGORIES[choice],
-    topic: "CLAIMED:none",
-    permissionOverwrites: [
-      {
-        id: guild.roles.everyone.id,
-        deny: [PermissionsBitField.Flags.ViewChannel],
-      },
-      {
-        id: user.id,
-        allow: [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages,
-          PermissionsBitField.Flags.ReadMessageHistory,
-        ],
-      },
-      {
-        id: supportRole.id,
-        allow: [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages,
-          PermissionsBitField.Flags.ReadMessageHistory,
-        ],
-      },
-    ],
-  });
-}
-
-      // 🔔 Ping staff + user
-      await channel.send(`<@&${SUPPORT_ROLE_ID}> | <@${user.id}>`);
-
-      const ticketEmbed = new EmbedBuilder()
-        .setColor("#00b0f4")
-        .setTitle("🎟️ Support Ticket Opened")
-        .setDescription(
-          "**Thank you for contacting Lake County Roleplay Support.**\n\n" +
-          "Please provide **clear and detailed information** regarding your issue so staff can assist you efficiently.\n\n" +
-          "**📄 Ticket Information:**\n" +
-          `• **User:** <@${user.id}>\n` +
-          `• **Category:** ${choice.replace("_", " ").toUpperCase()}\n` +
-          "• **Status:** 🟡 Open\n" +
-          "• **Claimed By:** ❌ Unclaimed\n\n" +
-          "**⏳ What Happens Next:**\n" +
-          "A staff member will review and respond as soon as possible."
-        )
-        .setFooter({
-          text: "Lake County Roleplay • Ticket Management"
-        });
-
-      const controls = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("claim").setLabel("Claim Ticket").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("unclaim").setLabel("Unclaim Ticket").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("close").setLabel("Close Ticket").setStyle(ButtonStyle.Danger)
+      const existing = guild.channels.cache.find(c =>
+        c.name.startsWith(`${user.username.toLowerCase()}`)
       );
 
-      await channel.send({ embeds: [ticketEmbed], components: [controls] });
+      if (existing) {
+        return interaction.reply({
+          content: "❌ You already have an open ticket.",
+          ephemeral: true
+        });
+      }
+
+      const cleanName = user.username
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+
+      const ticketNumber = Math.floor(1000 + Math.random() * 9000);
+
+      const supportRole = await guild.roles.fetch(SUPPORT_ROLE_ID);
+
+      if (!supportRole) {
+        return interaction.reply({
+          content: "❌ Support role not found.",
+          ephemeral: true
+        });
+      }
+
+      const channel = await guild.channels.create({
+        name: `${cleanName}-${ticketNumber}`,
+        parent: CATEGORIES[choice],
+        topic: "CLAIMED:none",
+        permissionOverwrites: [
+          {
+            id: guild.roles.everyone.id,
+            deny: [PermissionsBitField.Flags.ViewChannel],
+          },
+          {
+            id: user.id,
+            allow: [
+              PermissionsBitField.Flags.ViewChannel,
+              PermissionsBitField.Flags.SendMessages,
+              PermissionsBitField.Flags.ReadMessageHistory,
+            ],
+          },
+          {
+            id: supportRole.id,
+            allow: [
+              PermissionsBitField.Flags.ViewChannel,
+              PermissionsBitField.Flags.SendMessages,
+              PermissionsBitField.Flags.ReadMessageHistory,
+            ],
+          },
+        ],
+      });
+
+      await channel.send(`<@&${supportRole.id}> | <@${user.id}>`);
 
       return interaction.reply({
-        content: `✅ Your ticket has been created: ${channel}`,
+        content: `✅ Ticket created: ${channel}`,
         ephemeral: true
       });
     }
 
     // =====================
-    // BUTTONS
+    // BUTTONS (CLAIM / UNCLAIM / CLOSE)
     // =====================
     if (!interaction.isButton()) return;
 
@@ -197,47 +186,42 @@ if (interaction.isStringSelectMenu()) {
       interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
 
     if (!isStaff) {
-      return interaction.reply({ content: "❌ Staff only.", ephemeral: true });
+      return interaction.reply({
+        content: "❌ Staff only.",
+        ephemeral: true
+      });
     }
 
     // CLAIM
     if (interaction.customId === "claim") {
       if (claimedId !== "none") {
-        return interaction.reply({ content: "❌ This ticket is already claimed.", ephemeral: true });
+        return interaction.reply({
+          content: "❌ Ticket already claimed.",
+          ephemeral: true
+        });
       }
 
       await channel.setTopic(`CLAIMED:${interaction.user.id}`);
-
-      const embed = EmbedBuilder.from(interaction.message.embeds[0])
-        .setDescription(
-          interaction.message.embeds[0].description.replace(
-            "**Claimed By:** ❌ Unclaimed",
-            `**Claimed By:** <@${interaction.user.id}>`
-          )
-        );
-
-      await interaction.message.edit({ embeds: [embed] });
-      return interaction.reply({ content: "✅ Ticket claimed.", ephemeral: true });
+      return interaction.reply({
+        content: "✅ Ticket claimed.",
+        ephemeral: true
+      });
     }
 
     // UNCLAIM
     if (interaction.customId === "unclaim") {
       if (claimedId !== interaction.user.id) {
-        return interaction.reply({ content: "❌ You did not claim this ticket.", ephemeral: true });
+        return interaction.reply({
+          content: "❌ You did not claim this ticket.",
+          ephemeral: true
+        });
       }
 
       await channel.setTopic("CLAIMED:none");
-
-      const embed = EmbedBuilder.from(interaction.message.embeds[0])
-        .setDescription(
-          interaction.message.embeds[0].description.replace(
-            /\*\*Claimed By:\*\* <@.*?>/,
-            "**Claimed By:** ❌ Unclaimed"
-          )
-        );
-
-      await interaction.message.edit({ embeds: [embed] });
-      return interaction.reply({ content: "🔓 Ticket unclaimed.", ephemeral: true });
+      return interaction.reply({
+        content: "🔓 Ticket unclaimed.",
+        ephemeral: true
+      });
     }
 
     // CLOSE
@@ -246,16 +230,16 @@ if (interaction.isStringSelectMenu()) {
       setTimeout(() => channel.delete().catch(() => {}), 2000);
     }
 
-} catch (err) {
-  console.error("🔥 TICKET ERROR 🔥", err);
+  } catch (err) {
+    console.error("🔥 INTERACTION ERROR 🔥", err);
 
-  if (!interaction.replied && !interaction.deferred) {
-    interaction.reply({
-      content: `❌ Ticket creation failed.\n**Reason:** \`${err.message}\``,
-      ephemeral: true
-    }).catch(() => {});
+    if (!interaction.replied && !interaction.deferred) {
+      interaction.reply({
+        content: `❌ Error: ${err.message}`,
+        ephemeral: true
+      }).catch(() => {});
+    }
   }
-}
 });
 
 // =====================
