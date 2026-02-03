@@ -21,9 +21,9 @@ const client = new Client({
 // CONFIG
 // =====================
 const PREFIX = "!";
-const SUPPORT_ROLE_ID = "1282417060391161978"; // REQUIRED
+const SUPPORT_ROLE_ID = "PASTE_SUPPORT_ROLE_ID"; // REQUIRED
 
-// YOUR CATEGORY IDS
+// CATEGORY IDS
 const CATEGORIES = {
   general_support: "1468276842942435338",
   partnership_support: "1461009005798359204",
@@ -37,20 +37,29 @@ const CATEGORIES = {
 function buildPanel() {
   const embed = new EmbedBuilder()
     .setColor("#00b0f4")
-    .setTitle("🏛️ Lake County Roleplay — Assistance")
+    .setTitle("🏛️ Lake County Roleplay | Assistance Center")
     .setDescription(
-      "**Request Assistance Below**\n\n" +
-      "Select a category from the dropdown to open a ticket.\n\n" +
-      "🚨 **Rules:**\n" +
-      "• One ticket per issue\n" +
-      "• No trolling or false reports\n" +
-      "• Do not ping staff"
+      "**Welcome to the Lake County Roleplay Assistance Center**\n\n" +
+      "This system allows you to request official support from our staff team.\n\n" +
+      "**📌 Before Opening a Ticket:**\n" +
+      "• Only open tickets for legitimate reasons\n" +
+      "• One issue per ticket\n" +
+      "• Be clear and respectful at all times\n" +
+      "• Do **NOT** ping staff manually\n\n" +
+      "**📂 Available Support Categories:**\n" +
+      "👥 **General Support** — Questions, reports, concerns\n" +
+      "🤝 **Partnership Support** — Partnership & affiliation requests\n" +
+      "🛡️ **Internal Affairs** — Staff reports & appeals\n" +
+      "👑 **Management Support** — High-level or administrative matters\n\n" +
+      "Select a category from the dropdown below to begin."
     )
-    .setFooter({ text: "Lake County Roleplay | Ticket System" });
+    .setFooter({
+      text: "Lake County Roleplay • Official Support System"
+    });
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId("ticket_category")
-    .setPlaceholder("Choose a support category…")
+    .setPlaceholder("Select a support category…")
     .addOptions(
       { label: "General Support", value: "general_support", emoji: "👥" },
       { label: "Partnership Support", value: "partnership_support", emoji: "🤝" },
@@ -72,7 +81,7 @@ client.once("ready", () => {
 });
 
 // =====================
-// PREFIX COMMAND
+// SEND PANEL COMMAND
 // =====================
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
@@ -87,10 +96,11 @@ client.on("messageCreate", async (message) => {
 });
 
 // =====================
-// INTERACTIONS (SAFE)
+// INTERACTIONS
 // =====================
 client.on("interactionCreate", async (interaction) => {
   try {
+
     // =====================
     // DROPDOWN → CREATE TICKET
     // =====================
@@ -102,7 +112,10 @@ client.on("interactionCreate", async (interaction) => {
 
       const existing = guild.channels.cache.find(c => c.name === `ticket-${user.id}`);
       if (existing) {
-        return interaction.reply({ content: "❌ You already have an open ticket.", ephemeral: true });
+        return interaction.reply({
+          content: "❌ You already have an open ticket.",
+          ephemeral: true
+        });
       }
 
       const channel = await guild.channels.create({
@@ -116,24 +129,39 @@ client.on("interactionCreate", async (interaction) => {
         ]
       });
 
+      // 🔔 Ping staff + user
+      await channel.send(`<@&${SUPPORT_ROLE_ID}> | <@${user.id}>`);
+
       const ticketEmbed = new EmbedBuilder()
         .setColor("#00b0f4")
-        .setTitle("🎟️ Support Ticket")
+        .setTitle("🎟️ Support Ticket Opened")
         .setDescription(
-          `**User:** <@${user.id}>\n` +
-          `**Category:** ${choice.replace("_", " ").toUpperCase()}\n` +
-          `**Claimed By:** ❌ Unclaimed\n\n` +
-          "Please describe your issue in detail."
-        );
+          "**Thank you for contacting Lake County Roleplay Support.**\n\n" +
+          "Please provide **clear and detailed information** regarding your issue so staff can assist you efficiently.\n\n" +
+          "**📄 Ticket Information:**\n" +
+          `• **User:** <@${user.id}>\n` +
+          `• **Category:** ${choice.replace("_", " ").toUpperCase()}\n` +
+          "• **Status:** 🟡 Open\n" +
+          "• **Claimed By:** ❌ Unclaimed\n\n" +
+          "**⏳ What Happens Next:**\n" +
+          "A staff member will review and respond as soon as possible."
+        )
+        .setFooter({
+          text: "Lake County Roleplay • Ticket Management"
+        });
 
       const controls = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("claim").setLabel("Claim").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("unclaim").setLabel("Unclaim").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("close").setLabel("Close").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId("claim").setLabel("Claim Ticket").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId("unclaim").setLabel("Unclaim Ticket").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("close").setLabel("Close Ticket").setStyle(ButtonStyle.Danger)
       );
 
       await channel.send({ embeds: [ticketEmbed], components: [controls] });
-      return interaction.reply({ content: `✅ Ticket created: ${channel}`, ephemeral: true });
+
+      return interaction.reply({
+        content: `✅ Your ticket has been created: ${channel}`,
+        ephemeral: true
+      });
     }
 
     // =====================
@@ -156,7 +184,7 @@ client.on("interactionCreate", async (interaction) => {
     // CLAIM
     if (interaction.customId === "claim") {
       if (claimedId !== "none") {
-        return interaction.reply({ content: "❌ Ticket already claimed.", ephemeral: true });
+        return interaction.reply({ content: "❌ This ticket is already claimed.", ephemeral: true });
       }
 
       await channel.setTopic(`CLAIMED:${interaction.user.id}`);
@@ -176,7 +204,7 @@ client.on("interactionCreate", async (interaction) => {
     // UNCLAIM
     if (interaction.customId === "unclaim") {
       if (claimedId !== interaction.user.id) {
-        return interaction.reply({ content: "❌ You didn’t claim this ticket.", ephemeral: true });
+        return interaction.reply({ content: "❌ You did not claim this ticket.", ephemeral: true });
       }
 
       await channel.setTopic("CLAIMED:none");
@@ -201,10 +229,9 @@ client.on("interactionCreate", async (interaction) => {
 
   } catch (err) {
     console.error("Interaction Error:", err);
-
     if (!interaction.replied && !interaction.deferred) {
       interaction.reply({
-        content: "❌ Something went wrong. Please contact staff.",
+        content: "❌ An error occurred. Please contact staff.",
         ephemeral: true
       }).catch(() => {});
     }
