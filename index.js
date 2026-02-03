@@ -21,9 +21,12 @@ const client = new Client({
 // CONFIG
 // =====================
 const PREFIX = "!";
-const SUPPORT_ROLE_ID = "PASTE_SUPPORT_ROLE_ID";
+const SUPPORT_ROLE_ID = "PASTE_SUPPORT_ROLE_ID"; // REQUIRED
 const SSU_PING_ROLE_ID = null; // null = @everyone
+const SESSION_BANNER_URL =
+  "https://media.discordapp.net/attachments/1452829338545160285/1466919030127591613/ILLEGAL_FIREARM_1.png";
 
+// Ticket Categories
 const CATEGORIES = {
   general_support: "1468276842942435338",
   partnership_support: "1461009005798359204",
@@ -89,6 +92,7 @@ client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
   if (!message.content.startsWith(PREFIX)) return;
 
+  // SEND TICKET PANEL
   if (message.content === "!sendpanel") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
     await message.delete().catch(() => {});
@@ -110,13 +114,14 @@ client.on("messageCreate", async (message) => {
         "**Server Startup (SSU) Interest Check**\n\n" +
         "This poll is used to determine whether enough members are available to begin a **Server Startup (SSU)**.\n\n" +
         "**🗳️ How to Participate:**\n" +
-        "• Click **Attend** if you are available to join\n" +
+        "• Click **Attend** if you are available\n" +
         "• Click **Can’t Attend** if you are unavailable\n" +
         "• You may change or remove your vote at any time\n\n" +
-        "**🚨 SSU Auto-Start:**\n" +
+        "**🚨 Automatic Startup:**\n" +
         "• When **5 members** select **Attend**, the SSU will automatically begin\n\n" +
         "🟢 **Required Votes:** 5 Attend"
       )
+      .setImage(SESSION_BANNER_URL)
       .setFooter({ text: "Lake County Roleplay • Session Management" });
 
     const row = new ActionRowBuilder().addComponents(
@@ -124,12 +129,10 @@ client.on("messageCreate", async (message) => {
         .setCustomId("attend")
         .setLabel("✅ Attend (0/5)")
         .setStyle(ButtonStyle.Success),
-
       new ButtonBuilder()
         .setCustomId("cant")
         .setLabel("❌ Can’t Attend (0)")
         .setStyle(ButtonStyle.Danger),
-
       new ButtonBuilder()
         .setCustomId("view")
         .setLabel("👀 View Voters")
@@ -148,14 +151,16 @@ client.on("messageCreate", async (message) => {
 client.on("interactionCreate", async (interaction) => {
   try {
 
-    // ---------- SESSION POLL BUTTONS ----------
+    // =====================
+    // SESSION POLL BUTTONS
+    // =====================
     if (interaction.isButton() && ["attend", "cant", "view"].includes(interaction.customId)) {
       const poll = sessionPolls.get(interaction.message.id);
       if (!poll) return;
 
       const uid = interaction.user.id;
 
-      // VIEW VOTES
+      // VIEW VOTERS
       if (interaction.customId === "view") {
         return interaction.reply({
           embeds: [
@@ -163,15 +168,21 @@ client.on("interactionCreate", async (interaction) => {
               .setColor("#2ecc71")
               .setTitle("👀 Session Poll Voters")
               .addFields(
-                { name: "✅ Attend", value: [...poll.attend].map(id => `<@${id}>`).join("\n") || "None" },
-                { name: "❌ Can’t Attend", value: [...poll.cant].map(id => `<@${id}>`).join("\n") || "None" }
+                {
+                  name: "✅ Attend",
+                  value: [...poll.attend].map(id => `<@${id}>`).join("\n") || "None"
+                },
+                {
+                  name: "❌ Can’t Attend",
+                  value: [...poll.cant].map(id => `<@${id}>`).join("\n") || "None"
+                }
               )
           ],
           ephemeral: true
         });
       }
 
-      // LOCK IF STARTED
+      // LOCK AFTER START
       if (poll.started) {
         return interaction.reply({
           content: "🔒 Voting is locked. SSU has already started.",
@@ -182,7 +193,7 @@ client.on("interactionCreate", async (interaction) => {
       // TOGGLE LOGIC
       if (interaction.customId === "attend") {
         if (poll.attend.has(uid)) {
-          poll.attend.delete(uid); // unvote
+          poll.attend.delete(uid);
         } else {
           poll.cant.delete(uid);
           poll.attend.add(uid);
@@ -191,7 +202,7 @@ client.on("interactionCreate", async (interaction) => {
 
       if (interaction.customId === "cant") {
         if (poll.cant.has(uid)) {
-          poll.cant.delete(uid); // unvote
+          poll.cant.delete(uid);
         } else {
           poll.attend.delete(uid);
           poll.cant.add(uid);
@@ -217,6 +228,7 @@ client.on("interactionCreate", async (interaction) => {
                 "Thank you to everyone who participated in the attendance poll.\n\n" +
                 "Please join the server and follow all rules and staff instructions."
               )
+              .setImage(SESSION_BANNER_URL)
               .setTimestamp()
           ]
         });
