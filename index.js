@@ -21,7 +21,7 @@ const client = new Client({
 // CONFIG
 // =====================
 const PREFIX = "!";
-const SUPPORT_ROLE_ID = "PASTE_SUPPORT_ROLE_ID"; // REQUIRED (REAL ROLE ID)
+const SUPPORT_ROLE_ID = "PASTE_SUPPORT_ROLE_ID"; // REAL ROLE ID REQUIRED
 
 // Ticket Categories
 const CATEGORIES = {
@@ -46,18 +46,19 @@ function buildPanel() {
     .setTitle("🏛️ Lake County Roleplay | Assistance Center")
     .setDescription(
       "**Welcome to the official Assistance Center**\n\n" +
-      "Use the dropdown below to open a support ticket.\n\n" +
-      "**Rules:**\n" +
+      "This system allows you to contact staff for legitimate support needs.\n\n" +
+      "**📌 Guidelines:**\n" +
       "• One issue per ticket\n" +
-      "• Be respectful at all times\n" +
-      "• Do NOT ping staff manually\n\n" +
-      "**Categories:**\n" +
+      "• Be respectful and detailed\n" +
+      "• Do **NOT** ping staff manually\n\n" +
+      "**📂 Support Categories:**\n" +
       "👥 General Support\n" +
       "🤝 Partnership Support\n" +
       "🛡️ Internal Affairs\n" +
-      "👑 Management Support"
+      "👑 Management Support\n\n" +
+      "Select a category below to begin."
     )
-    .setFooter({ text: "Lake County Roleplay • Ticket System" });
+    .setFooter({ text: "Lake County Roleplay • Official Support System" });
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId("ticket_category")
@@ -92,13 +93,14 @@ client.on("messageCreate", async (message) => {
   // SEND TICKET PANEL
   if (message.content === "!sendpanel") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
-
     await message.delete().catch(() => {});
     await message.channel.send(buildPanel());
     return;
   }
 
-  // SESSION POLL
+  // =====================
+  // SESSION POLL (SSU)
+  // =====================
   if (message.content === "!ssuvote") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply("❌ Staff only.");
@@ -108,21 +110,25 @@ client.on("messageCreate", async (message) => {
       .setColor("#2ecc71")
       .setTitle("📊 Session Poll")
       .setDescription(
-        "**Session Poll!**\n\n" +
-        "Click below if you can attend.\n\n" +
-        "🟢 **5× votes needed**"
+        "**Server Startup Attendance Check**\n\n" +
+        "This poll is being used to determine interest and availability for a **Server Startup (SSU)**.\n\n" +
+        "**🗳️ How it works:**\n" +
+        "• Click **Attend** if you are able to join\n" +
+        "• Once **5 votes** are reached, voting will lock\n" +
+        "• Staff will proceed accordingly\n\n" +
+        "🟢 **5 votes required**"
       )
-      .setFooter({ text: "Lake County Roleplay" });
+      .setFooter({ text: "Lake County Roleplay • Session Management" });
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("session_attend")
-        .setLabel("Attend (0/5)")
+        .setLabel("✅ Attend (0/5)")
         .setStyle(ButtonStyle.Success),
 
       new ButtonBuilder()
         .setCustomId("session_view")
-        .setLabel("View Votes")
+        .setLabel("👀 View Voters")
         .setStyle(ButtonStyle.Secondary)
     );
 
@@ -154,12 +160,8 @@ client.on("interactionCreate", async (interaction) => {
       const { guild, user } = interaction;
       const choice = interaction.values[0];
 
-      const cleanName = user.username
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "");
-
+      const cleanName = user.username.toLowerCase().replace(/[^a-z0-9]/g, "");
       const ticketNumber = Math.floor(1000 + Math.random() * 9000);
-
       const supportRole = await guild.roles.fetch(SUPPORT_ROLE_ID);
 
       const channel = await guild.channels.create({
@@ -177,85 +179,25 @@ client.on("interactionCreate", async (interaction) => {
 
       const ticketEmbed = new EmbedBuilder()
         .setColor("#00b0f4")
-        .setTitle("🎟️ Support Ticket Created")
+        .setTitle("🎟️ Support Ticket Opened")
         .setDescription(
+          "**Thank you for reaching out to Lake County Roleplay Staff.**\n\n" +
           `**User:** ${user.tag}\n` +
           `**Category:** ${choice.replace("_", " ").toUpperCase()}\n` +
           "**Status:** 🟡 Open\n" +
           "**Claimed By:** ❌ Unclaimed\n\n" +
-          "Please describe your issue below."
+          "Please provide a **clear and detailed explanation** of your issue below."
         );
 
       const controls = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("claim").setLabel("Claim").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("unclaim").setLabel("Unclaim").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("close").setLabel("Close").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId("claim").setLabel("🟢 Claim Ticket").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId("unclaim").setLabel("🔄 Unclaim").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("close").setLabel("🔒 Close Ticket").setStyle(ButtonStyle.Danger)
       );
 
       await channel.send({ embeds: [ticketEmbed], components: [controls] });
 
       return interaction.reply({ content: `✅ Ticket created: ${channel}`, ephemeral: true });
-    }
-
-    // =====================
-    // TICKET BUTTONS
-    // =====================
-    if (interaction.isButton() && ["claim", "unclaim", "close"].includes(interaction.customId)) {
-      const channel = interaction.channel;
-      const claimedId = (channel.topic || "CLAIMED:none").split(":")[1];
-
-      if (
-        !interaction.member.roles.cache.has(SUPPORT_ROLE_ID) &&
-        !interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)
-      ) {
-        return interaction.reply({ content: "❌ Staff only.", ephemeral: true });
-      }
-
-      // CLAIM
-      if (interaction.customId === "claim") {
-        if (claimedId !== "none") {
-          return interaction.reply({ content: "❌ Already claimed.", ephemeral: true });
-        }
-
-        await channel.setTopic(`CLAIMED:${interaction.user.id}`);
-
-        const embed = EmbedBuilder.from(interaction.message.embeds[0])
-          .setDescription(
-            interaction.message.embeds[0].description.replace(
-              /\*\*Claimed By:\*\*.*$/,
-              `**Claimed By:** <@${interaction.user.id}>`
-            )
-          );
-
-        await interaction.message.edit({ embeds: [embed] });
-        return interaction.reply({ content: "✅ Ticket claimed.", ephemeral: true });
-      }
-
-      // UNCLAIM
-      if (interaction.customId === "unclaim") {
-        if (claimedId !== interaction.user.id) {
-          return interaction.reply({ content: "❌ You did not claim this.", ephemeral: true });
-        }
-
-        await channel.setTopic("CLAIMED:none");
-
-        const embed = EmbedBuilder.from(interaction.message.embeds[0])
-          .setDescription(
-            interaction.message.embeds[0].description.replace(
-              /\*\*Claimed By:\*\*.*$/,
-              "**Claimed By:** ❌ Unclaimed"
-            )
-          );
-
-        await interaction.message.edit({ embeds: [embed] });
-        return interaction.reply({ content: "🔓 Ticket unclaimed.", ephemeral: true });
-      }
-
-      // CLOSE
-      if (interaction.customId === "close") {
-        await interaction.reply("🔒 Closing ticket...");
-        setTimeout(() => channel.delete().catch(() => {}), 2000);
-      }
     }
 
     // =====================
@@ -267,7 +209,6 @@ client.on("interactionCreate", async (interaction) => {
 
       const userId = interaction.user.id;
 
-      // VIEW VOTES
       if (interaction.customId === "session_view") {
         const list =
           poll.voters.size > 0
@@ -278,52 +219,38 @@ client.on("interactionCreate", async (interaction) => {
           embeds: [
             new EmbedBuilder()
               .setColor("#2ecc71")
-              .setTitle("👥 Session Votes")
+              .setTitle("👀 Session Voters")
               .setDescription(list)
           ],
           ephemeral: true
         });
       }
 
-      // LOCK AT 5
       if (poll.voters.size >= 5) {
-        return interaction.reply({
-          content: "🔒 Voting is closed (5/5 reached).",
-          ephemeral: true
-        });
+        return interaction.reply({ content: "🔒 Voting is closed (5/5 reached).", ephemeral: true });
       }
 
-      // PREVENT DOUBLE VOTE
       if (poll.voters.has(userId)) {
-        return interaction.reply({
-          content: "❌ You already voted.",
-          ephemeral: true
-        });
+        return interaction.reply({ content: "❌ You have already voted.", ephemeral: true });
       }
 
-      // ADD VOTE
       poll.voters.add(userId);
-
       const count = poll.voters.size;
 
       const updatedRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("session_attend")
-          .setLabel(`Attend (${count}/5)`)
+          .setLabel(`✅ Attend (${count}/5)`)
           .setStyle(ButtonStyle.Success),
-
         new ButtonBuilder()
           .setCustomId("session_view")
-          .setLabel("View Votes")
+          .setLabel("👀 View Voters")
           .setStyle(ButtonStyle.Secondary)
       );
 
       await interaction.message.edit({ components: [updatedRow] });
 
-      return interaction.reply({
-        content: "✅ Your attendance has been recorded.",
-        ephemeral: true
-      });
+      return interaction.reply({ content: "✅ Your response has been recorded.", ephemeral: true });
     }
 
   } catch (err) {
