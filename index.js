@@ -104,61 +104,49 @@ client.on("interactionCreate", async (interaction) => {
     // =====================
     // DROPDOWN → CREATE TICKET
     // =====================
-    if (interaction.isStringSelectMenu()) {
-      if (interaction.customId !== "ticket_category") return;
+    
+if (interaction.isStringSelectMenu()) {
+  if (interaction.customId !== "ticket_category") return;
 
-      const { guild, user } = interaction;
-      const choice = interaction.values[0];
+  const { guild, user } = interaction;
+  const choice = interaction.values[0];
 
-      const existing = guild.channels.cache.find(c => c.name === `ticket-${user.id}`);
-      if (existing) {
-        return interaction.reply({
-          content: "❌ You already have an open ticket.",
-          ephemeral: true
-        });
-      }
+  const cleanName = user.username
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 
-const supportRole = await guild.roles.fetch(SUPPORT_ROLE_ID);
+  const ticketNumber = Math.floor(1000 + Math.random() * 9000);
 
-if (!supportRole) {
-  return interaction.reply({
-    content: "❌ Support role not found. Please contact management.",
-    ephemeral: true
+  const supportRole = await guild.roles.fetch(SUPPORT_ROLE_ID);
+
+  const channel = await guild.channels.create({
+    name: `${cleanName}-${ticketNumber}`, // ✅ THIS LINE
+    parent: CATEGORIES[choice],
+    topic: "CLAIMED:none",
+    permissionOverwrites: [
+      {
+        id: guild.roles.everyone.id,
+        deny: [PermissionsBitField.Flags.ViewChannel],
+      },
+      {
+        id: user.id,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages,
+          PermissionsBitField.Flags.ReadMessageHistory,
+        ],
+      },
+      {
+        id: supportRole.id,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages,
+          PermissionsBitField.Flags.ReadMessageHistory,
+        ],
+      },
+    ],
   });
 }
-const cleanName = user.username
-  .toLowerCase()
-  .replace(/[^a-z0-9]/g, "");
-
-const ticketNumber = Math.floor(1000 + Math.random() * 9000);
-
-const channel = await guild.channels.create({
-  name: `${cleanName}-${ticketNumber}`,
-  parent: CATEGORIES[choice],
-  topic: "CLAIMED:none",
-  permissionOverwrites: [
-    {
-      id: guild.roles.everyone.id, // ✅ FIXED
-      deny: [PermissionsBitField.Flags.ViewChannel],
-    },
-    {
-      id: user.id,
-      allow: [
-        PermissionsBitField.Flags.ViewChannel,
-        PermissionsBitField.Flags.SendMessages,
-        PermissionsBitField.Flags.ReadMessageHistory,
-      ],
-    },
-    {
-      id: supportRole.id, // ✅ VERIFIED ROLE
-      allow: [
-        PermissionsBitField.Flags.ViewChannel,
-        PermissionsBitField.Flags.SendMessages,
-        PermissionsBitField.Flags.ReadMessageHistory,
-      ],
-    },
-  ],
-});
 
       // 🔔 Ping staff + user
       await channel.send(`<@&${SUPPORT_ROLE_ID}> | <@${user.id}>`);
