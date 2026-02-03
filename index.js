@@ -21,7 +21,7 @@ const client = new Client({
 // CONFIG
 // =====================
 const PREFIX = "!";
-const SUPPORT_ROLE_ID = "PASTE_SUPPORT_ROLE_ID";
+const SUPPORT_ROLE_ID = "1282417060391161978";
 
 // CATEGORY IDS (YOUR IDS)
 const CATEGORIES = {
@@ -217,3 +217,4 @@ client.on("interactionCreate", async (interaction) => {
 // LOGIN
 // =====================
 client.login(process.env.TOKEN);
+
