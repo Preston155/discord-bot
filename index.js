@@ -21,8 +21,8 @@ const client = new Client({
 // CONFIG
 // =====================
 const PREFIX = "!";
-const SUPPORT_ROLE_ID = "1282417060391161978";
-const SSU_PING_ROLE_ID = 1468213717035384882; // null = @everyone
+const SUPPORT_ROLE_ID = "PASTE_SUPPORT_ROLE_ID";
+const SSU_PING_ROLE_ID = null; // null = @everyone
 
 const CATEGORIES = {
   general_support: "1468276842942435338",
@@ -54,11 +54,11 @@ function buildPanel() {
     .setDescription(
       "**Official Support System**\n\n" +
       "Use this panel to contact staff for legitimate concerns.\n\n" +
-      "**Rules:**\n" +
+      "**Guidelines:**\n" +
       "• One issue per ticket\n" +
       "• Be respectful and detailed\n" +
       "• Do NOT ping staff manually\n\n" +
-      "**Categories:**\n" +
+      "**Support Categories:**\n" +
       "👥 General Support\n" +
       "🤝 Partnership Support\n" +
       "🛡️ Internal Affairs\n" +
@@ -95,6 +95,9 @@ client.on("messageCreate", async (message) => {
     await message.channel.send(buildPanel());
   }
 
+  // =====================
+  // SESSION POLL
+  // =====================
   if (message.content === "!ssuvote") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply("❌ Staff only.");
@@ -102,22 +105,38 @@ client.on("messageCreate", async (message) => {
 
     const embed = new EmbedBuilder()
       .setColor("#2ecc71")
-      .setTitle("📊 Session Poll")
+      .setTitle("📊 Session Attendance Poll")
       .setDescription(
-        "**Server Startup Attendance Check**\n\n" +
-        "Click the appropriate option below.\n\n" +
-        "🟢 **5 Attend votes required to start SSU**"
+        "**Server Startup (SSU) Interest Check**\n\n" +
+        "This poll is used to determine whether enough members are available to begin a **Server Startup (SSU)**.\n\n" +
+        "**🗳️ How to Participate:**\n" +
+        "• Click **Attend** if you are available to join\n" +
+        "• Click **Can’t Attend** if you are unavailable\n" +
+        "• You may change or remove your vote at any time\n\n" +
+        "**🚨 SSU Auto-Start:**\n" +
+        "• When **5 members** select **Attend**, the SSU will automatically begin\n\n" +
+        "🟢 **Required Votes:** 5 Attend"
       )
       .setFooter({ text: "Lake County Roleplay • Session Management" });
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("attend").setLabel("✅ Attend (0/5)").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("cant").setLabel("❌ Can't Attend (0)").setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId("view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder()
+        .setCustomId("attend")
+        .setLabel("✅ Attend (0/5)")
+        .setStyle(ButtonStyle.Success),
+
+      new ButtonBuilder()
+        .setCustomId("cant")
+        .setLabel("❌ Can’t Attend (0)")
+        .setStyle(ButtonStyle.Danger),
+
+      new ButtonBuilder()
+        .setCustomId("view")
+        .setLabel("👀 View Voters")
+        .setStyle(ButtonStyle.Secondary)
     );
 
     const msg = await message.channel.send({ embeds: [embed], components: [row] });
-
     sessionPolls.set(msg.id, { attend: new Set(), cant: new Set(), started: false });
     await message.delete().catch(() => {});
   }
@@ -129,49 +148,6 @@ client.on("messageCreate", async (message) => {
 client.on("interactionCreate", async (interaction) => {
   try {
 
-    // ---------- TICKET DROPDOWN ----------
-    if (interaction.isStringSelectMenu() && interaction.customId === "ticket_category") {
-      const { guild, user } = interaction;
-      const choice = interaction.values[0];
-
-      const clean = user.username.toLowerCase().replace(/[^a-z0-9]/g, "");
-      const num = Math.floor(1000 + Math.random() * 9000);
-      const role = await guild.roles.fetch(SUPPORT_ROLE_ID);
-
-      const channel = await guild.channels.create({
-        name: `${clean}-${num}`,
-        parent: CATEGORIES[choice],
-        topic: "CLAIMED:none",
-        permissionOverwrites: [
-          { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-          { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-          { id: role.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
-        ]
-      });
-
-      await channel.send(`<@&${role.id}> | <@${user.id}>`);
-
-      const embed = new EmbedBuilder()
-        .setColor("#00b0f4")
-        .setTitle("🎟️ Support Ticket Opened")
-        .setDescription(
-          `**User:** ${user.tag}\n` +
-          `**Category:** ${choice.replace("_", " ").toUpperCase()}\n` +
-          "**Status:** 🟡 Open\n" +
-          "**Claimed By:** ❌ Unclaimed\n\n" +
-          "Please describe your issue below."
-        );
-
-      const buttons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("claim").setLabel("🟢 Claim").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("unclaim").setLabel("🔄 Unclaim").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("close").setLabel("🔒 Close").setStyle(ButtonStyle.Danger)
-      );
-
-      await channel.send({ embeds: [embed], components: [buttons] });
-      return interaction.reply({ content: `✅ Ticket created: ${channel}`, ephemeral: true });
-    }
-
     // ---------- SESSION POLL BUTTONS ----------
     if (interaction.isButton() && ["attend", "cant", "view"].includes(interaction.customId)) {
       const poll = sessionPolls.get(interaction.message.id);
@@ -179,27 +155,48 @@ client.on("interactionCreate", async (interaction) => {
 
       const uid = interaction.user.id;
 
+      // VIEW VOTES
       if (interaction.customId === "view") {
         return interaction.reply({
           embeds: [
             new EmbedBuilder()
               .setColor("#2ecc71")
-              .setTitle("👀 Session Votes")
+              .setTitle("👀 Session Poll Voters")
               .addFields(
                 { name: "✅ Attend", value: [...poll.attend].map(id => `<@${id}>`).join("\n") || "None" },
-                { name: "❌ Can't Attend", value: [...poll.cant].map(id => `<@${id}>`).join("\n") || "None" }
+                { name: "❌ Can’t Attend", value: [...poll.cant].map(id => `<@${id}>`).join("\n") || "None" }
               )
           ],
           ephemeral: true
         });
       }
 
-      if (poll.attend.has(uid) || poll.cant.has(uid)) {
-        return interaction.reply({ content: "❌ You already voted.", ephemeral: true });
+      // LOCK IF STARTED
+      if (poll.started) {
+        return interaction.reply({
+          content: "🔒 Voting is locked. SSU has already started.",
+          ephemeral: true
+        });
       }
 
-      if (interaction.customId === "attend") poll.attend.add(uid);
-      if (interaction.customId === "cant") poll.cant.add(uid);
+      // TOGGLE LOGIC
+      if (interaction.customId === "attend") {
+        if (poll.attend.has(uid)) {
+          poll.attend.delete(uid); // unvote
+        } else {
+          poll.cant.delete(uid);
+          poll.attend.add(uid);
+        }
+      }
+
+      if (interaction.customId === "cant") {
+        if (poll.cant.has(uid)) {
+          poll.cant.delete(uid); // unvote
+        } else {
+          poll.attend.delete(uid);
+          poll.cant.add(uid);
+        }
+      }
 
       const attendCount = poll.attend.size;
 
@@ -216,8 +213,9 @@ client.on("interactionCreate", async (interaction) => {
               .setColor("#00ff99")
               .setTitle("🚨 SERVER STARTUP (SSU)")
               .setDescription(
-                "**Server Startup has officially begun!**\n\n" +
-                "Please join and follow all server rules."
+                "**The Server Startup has officially begun!**\n\n" +
+                "Thank you to everyone who participated in the attendance poll.\n\n" +
+                "Please join the server and follow all rules and staff instructions."
               )
               .setTimestamp()
           ]
@@ -225,13 +223,22 @@ client.on("interactionCreate", async (interaction) => {
       }
 
       const updatedRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("attend").setLabel(`✅ Attend (${attendCount}/5)`).setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("cant").setLabel(`❌ Can't Attend (${poll.cant.size})`).setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId("view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder()
+          .setCustomId("attend")
+          .setLabel(`✅ Attend (${attendCount}/5)`)
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId("cant")
+          .setLabel(`❌ Can’t Attend (${poll.cant.size})`)
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId("view")
+          .setLabel("👀 View Voters")
+          .setStyle(ButtonStyle.Secondary)
       );
 
       await interaction.message.edit({ components: [updatedRow] });
-      return interaction.reply({ content: "✅ Response recorded.", ephemeral: true });
+      return interaction.reply({ content: "✅ Your response has been updated.", ephemeral: true });
     }
 
   } catch (err) {
