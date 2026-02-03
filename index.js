@@ -1,4 +1,8 @@
-const { Client, GatewayIntentBits, PermissionsBitField } = require("discord.js");
+const { 
+  Client, 
+  GatewayIntentBits, 
+  PermissionsBitField 
+} = require("discord.js");
 const fs = require("fs");
 
 // =====================
@@ -14,7 +18,7 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.MessageContent
   ],
 });
 
@@ -22,7 +26,7 @@ const client = new Client({
 // DATA (PERSISTENT)
 // =====================
 let data = {
-  pingCount: 0,
+  pingUses: 0,
 };
 
 if (fs.existsSync(DATA_FILE)) {
@@ -50,21 +54,21 @@ client.on("messageCreate", async (message) => {
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
 
-  // =====================
+  // ---------------------
   // !ping
-  // =====================
+  // ---------------------
   if (command === "ping") {
-    data.pingCount++;
+    data.pingUses++;
     saveData();
 
     return message.reply(
-      `🏓 Pong!\nPing used **${data.pingCount}** times.`
+      `🏓 Pong!\nPing used **${data.pingUses}** times.`
     );
   }
 
-  // =====================
+  // ---------------------
   // !say (ADMIN ONLY)
-  // =====================
+  // ---------------------
   if (command === "say") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply("❌ You do not have permission to use this command.");
@@ -73,13 +77,13 @@ client.on("messageCreate", async (message) => {
     const text = args.join(" ");
     if (!text) return message.reply("❌ Please provide a message.");
 
-    message.delete().catch(() => {});
-    message.channel.send(text);
+    await message.delete().catch(() => {});
+    return message.channel.send(text);
   }
 
-  // =====================
+  // ---------------------
   // !lock (ADMIN ONLY)
-  // =====================
+  // ---------------------
   if (command === "lock") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply("❌ You do not have permission to lock channels.");
@@ -90,12 +94,12 @@ client.on("messageCreate", async (message) => {
       { SendMessages: false }
     );
 
-    message.channel.send("🔒 Channel locked.");
+    return message.channel.send("🔒 Channel locked.");
   }
 
-  // =====================
+  // ---------------------
   // !unlock (ADMIN ONLY)
-  // =====================
+  // ---------------------
   if (command === "unlock") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply("❌ You do not have permission to unlock channels.");
@@ -106,7 +110,7 @@ client.on("messageCreate", async (message) => {
       { SendMessages: true }
     );
 
-    message.channel.send("🔓 Channel unlocked.");
+    return message.channel.send("🔓 Channel unlocked.");
   }
 });
 
