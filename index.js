@@ -21,8 +21,9 @@ const client = new Client({
 // CONFIG
 // =====================
 const PREFIX = "!";
-const SUPPORT_ROLE_ID = "1282417060391161978"; // REQUIRED
+const SUPPORT_ROLE_ID = "1282417060391161978";
 const SSU_PING_ROLE_ID = null; // null = @everyone
+
 const SESSION_BANNER_URL =
   "https://media.discordapp.net/attachments/1452829338545160285/1466919030127591613/ILLEGAL_FIREARM_1.png";
 
@@ -112,12 +113,12 @@ client.on("messageCreate", async (message) => {
       .setTitle("📊 Session Attendance Poll")
       .setDescription(
         "**Server Startup (SSU) Interest Check**\n\n" +
-        "This poll is used to determine whether enough members are available to begin a **Server Startup (SSU)**.\n\n" +
-        "**🗳️ How to Participate:**\n" +
-        "• Click **Attend** if you are available\n" +
+        "This poll determines if there are enough members available to begin a Server Startup.\n\n" +
+        "**How it works:**\n" +
+        "• Click **Attend** if you can join\n" +
         "• Click **Can’t Attend** if you are unavailable\n" +
         "• You may change or remove your vote at any time\n\n" +
-        "**🚨 Automatic Startup:**\n" +
+        "**Automatic Startup:**\n" +
         "• When **5 members** select **Attend**, the SSU will automatically begin\n\n" +
         "🟢 **Required Votes:** 5 Attend"
       )
@@ -125,18 +126,9 @@ client.on("messageCreate", async (message) => {
       .setFooter({ text: "Lake County Roleplay • Session Management" });
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("attend")
-        .setLabel("✅ Attend (0/5)")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId("cant")
-        .setLabel("❌ Can’t Attend (0)")
-        .setStyle(ButtonStyle.Danger),
-      new ButtonBuilder()
-        .setCustomId("view")
-        .setLabel("👀 View Voters")
-        .setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId("attend").setLabel("✅ Attend (0/5)").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("cant").setLabel("❌ Can’t Attend (0)").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
     );
 
     const msg = await message.channel.send({ embeds: [embed], components: [row] });
@@ -150,17 +142,12 @@ client.on("messageCreate", async (message) => {
 // =====================
 client.on("interactionCreate", async (interaction) => {
   try {
-
-    // =====================
-    // SESSION POLL BUTTONS
-    // =====================
     if (interaction.isButton() && ["attend", "cant", "view"].includes(interaction.customId)) {
       const poll = sessionPolls.get(interaction.message.id);
       if (!poll) return;
 
       const uid = interaction.user.id;
 
-      // VIEW VOTERS
       if (interaction.customId === "view") {
         return interaction.reply({
           embeds: [
@@ -168,66 +155,35 @@ client.on("interactionCreate", async (interaction) => {
               .setColor("#2ecc71")
               .setTitle("👀 Session Poll Voters")
               .addFields(
-                {
-                  name: "✅ Attend",
-                  value: [...poll.attend].map(id => `<@${id}>`).join("\n") || "None"
-                },
-                {
-                  name: "❌ Can’t Attend",
-                  value: [...poll.cant].map(id => `<@${id}>`).join("\n") || "None"
-                }
+                { name: "✅ Attend", value: [...poll.attend].map(id => `<@${id}>`).join("\n") || "None" },
+                { name: "❌ Can’t Attend", value: [...poll.cant].map(id => `<@${id}>`).join("\n") || "None" }
               )
           ],
           ephemeral: true
         });
       }
 
-      // LOCK AFTER START
       if (poll.started) {
-        return interaction.reply({
-          content: "🔒 Voting is locked. SSU has already started.",
-          ephemeral: true
-        });
+        return interaction.reply({ content: "🔒 Voting locked. SSU already started.", ephemeral: true });
       }
 
-      // TOGGLE LOGIC
       if (interaction.customId === "attend") {
-        if (poll.attend.has(uid)) {
-          poll.attend.delete(uid);
-        } else {
-          poll.cant.delete(uid);
-          poll.attend.add(uid);
-        }
+        poll.attend.has(uid) ? poll.attend.delete(uid) : (poll.cant.delete(uid), poll.attend.add(uid));
       }
 
       if (interaction.customId === "cant") {
-        if (poll.cant.has(uid)) {
-          poll.cant.delete(uid);
-        } else {
-          poll.attend.delete(uid);
-          poll.cant.add(uid);
-        }
+        poll.cant.has(uid) ? poll.cant.delete(uid) : (poll.attend.delete(uid), poll.cant.add(uid));
       }
 
-      const attendCount = poll.attend.size;
-
-      // AUTO START SSU
-      if (attendCount >= 5 && !poll.started) {
+      if (poll.attend.size >= 5 && !poll.started) {
         poll.started = true;
-
-        const ping = SSU_PING_ROLE_ID ? `<@&${SSU_PING_ROLE_ID}>` : "@everyone";
-
         await interaction.channel.send({
-          content: ping,
+          content: SSU_PING_ROLE_ID ? `<@&${SSU_PING_ROLE_ID}>` : "@everyone",
           embeds: [
             new EmbedBuilder()
               .setColor("#00ff99")
               .setTitle("🚨 SERVER STARTUP (SSU)")
-              .setDescription(
-                "**The Server Startup has officially begun!**\n\n" +
-                "Thank you to everyone who participated in the attendance poll.\n\n" +
-                "Please join the server and follow all rules and staff instructions."
-              )
+              .setDescription("The Server Startup has officially begun. Please join and follow all rules.")
               .setImage(SESSION_BANNER_URL)
               .setTimestamp()
           ]
@@ -235,26 +191,16 @@ client.on("interactionCreate", async (interaction) => {
       }
 
       const updatedRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("attend")
-          .setLabel(`✅ Attend (${attendCount}/5)`)
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId("cant")
-          .setLabel(`❌ Can’t Attend (${poll.cant.size})`)
-          .setStyle(ButtonStyle.Danger),
-        new ButtonBuilder()
-          .setCustomId("view")
-          .setLabel("👀 View Voters")
-          .setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId("attend").setLabel(`✅ Attend (${poll.attend.size}/5)`).setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId("cant").setLabel(`❌ Can’t Attend (${poll.cant.size})`).setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId("view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
       );
 
       await interaction.message.edit({ components: [updatedRow] });
       return interaction.reply({ content: "✅ Your response has been updated.", ephemeral: true });
     }
-
   } catch (err) {
-    console.error("ERROR:", err);
+    console.error(err);
   }
 });
 
@@ -262,4 +208,3 @@ client.on("interactionCreate", async (interaction) => {
 // LOGIN
 // =====================
 client.login(process.env.TOKEN);
-
