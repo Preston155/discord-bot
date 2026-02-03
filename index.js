@@ -21,7 +21,7 @@ const client = new Client({
 // CONFIG
 // =====================
 const PREFIX = "!";
-const SUPPORT_ROLE_ID = "PASTE_SUPPORT_ROLE_ID"; // REQUIRED
+const SUPPORT_ROLE_ID = "1282417060391161978"; // REQUIRED
 
 // CATEGORY IDS
 const CATEGORIES = {
