@@ -21,9 +21,8 @@ const client = new Client({
 // CONFIG
 // =====================
 const PREFIX = "!";
-const SUPPORT_ROLE_ID = "1282417060391161978";
+const SUPPORT_ROLE_ID = "PASTE_SUPPORT_ROLE_ID";
 
-// CATEGORY IDS (YOUR IDS)
 const CATEGORIES = {
   general_support: "1468276842942435338",
   partnership_support: "1461009005798359204",
@@ -32,55 +31,33 @@ const CATEGORIES = {
 };
 
 // =====================
-// PANEL BUILDER
+// PANEL
 // =====================
 function buildPanel() {
   const embed = new EmbedBuilder()
     .setColor("#00b0f4")
     .setTitle("🏛️ Lake County Roleplay — Assistance")
     .setDescription(
-      "**Request Assistance Below**\n\n" +
-      "Select a category from the dropdown to open a ticket.\n\n" +
-      "🚨 **Rules:**\n" +
+      "**Select a category below to open a ticket**\n\n" +
       "• One ticket per issue\n" +
-      "• No trolling or false reports\n" +
-      "• Do not ping staff"
-    )
-    .setFooter({ text: "Lake County Roleplay | Ticket System" });
+      "• Do not ping staff\n" +
+      "• False tickets will be punished"
+    );
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId("ticket_category")
-    .setPlaceholder("Select a support category…")
+    .setPlaceholder("Choose a support category…")
     .addOptions(
-      {
-        label: "General Support",
-        description: "General help & questions",
-        value: "general_support",
-        emoji: "👥"
-      },
-      {
-        label: "Partnership Support",
-        description: "Partnerships & affiliations",
-        value: "partnership_support",
-        emoji: "🤝"
-      },
-      {
-        label: "Internal Affairs",
-        description: "Reports & complaints",
-        value: "ia_support",
-        emoji: "🛡️"
-      },
-      {
-        label: "Management Support",
-        description: "High-level assistance",
-        value: "management_support",
-        emoji: "👑"
-      }
+      { label: "General Support", value: "general_support", emoji: "👥" },
+      { label: "Partnership Support", value: "partnership_support", emoji: "🤝" },
+      { label: "Internal Affairs", value: "ia_support", emoji: "🛡️" },
+      { label: "Management Support", value: "management_support", emoji: "👑" }
     );
 
-  const row = new ActionRowBuilder().addComponents(menu);
-
-  return { embeds: [embed], components: [row] };
+  return {
+    embeds: [embed],
+    components: [new ActionRowBuilder().addComponents(menu)]
+  };
 }
 
 // =====================
@@ -97,12 +74,9 @@ client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
   if (!message.content.startsWith(PREFIX)) return;
 
-  const command = message.content.slice(PREFIX.length).toLowerCase();
-
-  // ADMIN ONLY
-  if (command === "sendpanel") {
+  if (message.content === "!sendpanel") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return message.reply("❌ You do not have permission to do this.");
+      return message.reply("❌ Admin only.");
     }
 
     await message.channel.send(buildPanel());
@@ -111,12 +85,12 @@ client.on("messageCreate", async (message) => {
 });
 
 // =====================
-// INTERACTIONS
+// INTERACTIONS (ONE HANDLER)
 // =====================
 client.on("interactionCreate", async (interaction) => {
 
   // =====================
-  // CATEGORY SELECT
+  // SELECT MENU → CREATE TICKET
   // =====================
   if (interaction.isStringSelectMenu()) {
     if (interaction.customId !== "ticket_category") return;
@@ -127,17 +101,14 @@ client.on("interactionCreate", async (interaction) => {
     const existing = guild.channels.cache.find(
       c => c.name === `ticket-${user.id}`
     );
-
     if (existing) {
-      return interaction.reply({
-        content: "❌ You already have an open ticket.",
-        ephemeral: true
-      });
+      return interaction.reply({ content: "❌ You already have a ticket.", ephemeral: true });
     }
 
     const channel = await guild.channels.create({
       name: `ticket-${user.id}`,
       parent: CATEGORIES[choice],
+      topic: "CLAIMED:none",
       permissionOverwrites: [
         { id: guild.roles.everyone, deny: [PermissionsBitField.Flags.ViewChannel] },
         { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
@@ -145,34 +116,34 @@ client.on("interactionCreate", async (interaction) => {
       ]
     });
 
-    const ticketEmbed = new EmbedBuilder()
+    const embed = new EmbedBuilder()
       .setColor("#00b0f4")
       .setTitle("🎟️ Support Ticket")
       .setDescription(
         `**User:** <@${user.id}>\n` +
         `**Category:** ${choice.replace("_", " ").toUpperCase()}\n` +
         `**Claimed By:** ❌ Unclaimed\n\n` +
-        "Please describe your issue in detail."
+        "Please explain your issue."
       );
 
     const controls = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("claim_ticket").setLabel("Claim").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("unclaim_ticket").setLabel("Unclaim").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("close_ticket").setLabel("Close Ticket").setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId("claim").setLabel("Claim").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("unclaim").setLabel("Unclaim").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("close").setLabel("Close").setStyle(ButtonStyle.Danger)
     );
 
-    await channel.send({ embeds: [ticketEmbed], components: [controls] });
-
-    return interaction.reply({
-      content: `✅ Ticket created: ${channel}`,
-      ephemeral: true
-    });
+    await channel.send({ embeds: [embed], components: [controls] });
+    return interaction.reply({ content: `✅ Ticket created: ${channel}`, ephemeral: true });
   }
 
   // =====================
-  // BUTTONS (STAFF)
+  // BUTTONS
   // =====================
   if (!interaction.isButton()) return;
+
+  const channel = interaction.channel;
+  const topic = channel.topic || "CLAIMED:none";
+  const claimedId = topic.split(":")[1];
 
   const isStaff =
     interaction.member.roles.cache.has(SUPPORT_ROLE_ID) ||
@@ -182,34 +153,50 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "❌ Staff only.", ephemeral: true });
   }
 
-  const message = interaction.message;
-  const embed = EmbedBuilder.from(message.embeds[0]);
+  // CLAIM
+  if (interaction.customId === "claim") {
+    if (claimedId !== "none") {
+      return interaction.reply({ content: "❌ Ticket already claimed.", ephemeral: true });
+    }
 
-  if (interaction.customId === "claim_ticket") {
-    embed.setDescription(
-      embed.data.description.replace(
-        /\*\*Claimed By:\*\*.*\n/,
-        `**Claimed By:** <@${interaction.user.id}>\n`
-      )
-    );
-    await message.edit({ embeds: [embed] });
+    await channel.setTopic(`CLAIMED:${interaction.user.id}`);
+
+    const embed = EmbedBuilder.from(interaction.message.embeds[0])
+      .setDescription(
+        interaction.message.embeds[0].description.replace(
+          "**Claimed By:** ❌ Unclaimed",
+          `**Claimed By:** <@${interaction.user.id}>`
+        )
+      );
+
+    await interaction.message.edit({ embeds: [embed] });
     return interaction.reply({ content: "✅ Ticket claimed.", ephemeral: true });
   }
 
-  if (interaction.customId === "unclaim_ticket") {
-    embed.setDescription(
-      embed.data.description.replace(
-        /\*\*Claimed By:\*\*.*\n/,
-        "**Claimed By:** ❌ Unclaimed\n"
-      )
-    );
-    await message.edit({ embeds: [embed] });
+  // UNCLAIM
+  if (interaction.customId === "unclaim") {
+    if (claimedId !== interaction.user.id) {
+      return interaction.reply({ content: "❌ You didn’t claim this ticket.", ephemeral: true });
+    }
+
+    await channel.setTopic("CLAIMED:none");
+
+    const embed = EmbedBuilder.from(interaction.message.embeds[0])
+      .setDescription(
+        interaction.message.embeds[0].description.replace(
+          /\*\*Claimed By:\*\* <@.*?>/,
+          "**Claimed By:** ❌ Unclaimed"
+        )
+      );
+
+    await interaction.message.edit({ embeds: [embed] });
     return interaction.reply({ content: "🔓 Ticket unclaimed.", ephemeral: true });
   }
 
-  if (interaction.customId === "close_ticket") {
+  // CLOSE
+  if (interaction.customId === "close") {
     await interaction.reply("🔒 Closing ticket...");
-    setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
+    setTimeout(() => channel.delete().catch(() => {}), 2000);
   }
 });
 
@@ -217,4 +204,3 @@ client.on("interactionCreate", async (interaction) => {
 // LOGIN
 // =====================
 client.login(process.env.TOKEN);
-
