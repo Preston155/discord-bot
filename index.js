@@ -5,7 +5,8 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  StringSelectMenuBuilder
 } = require("discord.js");
 
 const client = new Client({
@@ -20,9 +21,9 @@ const client = new Client({
 // CONFIG
 // =====================
 const PREFIX = "!";
-const SUPPORT_ROLE_ID = "1282417060391161978";
+const SUPPORT_ROLE_ID = "PASTE_SUPPORT_ROLE_ID";
 
-// CATEGORY IDS
+// CATEGORY IDS (YOUR IDS)
 const CATEGORIES = {
   general_support: "1468276842942435338",
   partnership_support: "1461009005798359204",
@@ -31,48 +32,53 @@ const CATEGORIES = {
 };
 
 // =====================
-// PANEL BUILDER (REUSED)
+// PANEL BUILDER
 // =====================
 function buildPanel() {
   const embed = new EmbedBuilder()
     .setColor("#00b0f4")
     .setTitle("🏛️ Lake County Roleplay — Assistance")
     .setDescription(
-      "**Welcome to the Assistance Dashboard**\n\n" +
-      "Select a category below to open a ticket.\n\n" +
+      "**Request Assistance Below**\n\n" +
+      "Select a category from the dropdown to open a ticket.\n\n" +
       "🚨 **Rules:**\n" +
       "• One ticket per issue\n" +
       "• No trolling or false reports\n" +
-      "• Do not ping staff\n\n" +
-      "**Categories:**\n" +
-      "👥 General Support\n" +
-      "🤝 Partnership Support\n" +
-      "🛡️ Internal Affairs\n" +
-      "👑 Management Support"
+      "• Do not ping staff"
     )
     .setFooter({ text: "Lake County Roleplay | Ticket System" });
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("general_support")
-      .setLabel("General Support")
-      .setStyle(ButtonStyle.Primary),
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId("ticket_category")
+    .setPlaceholder("Select a support category…")
+    .addOptions(
+      {
+        label: "General Support",
+        description: "General help & questions",
+        value: "general_support",
+        emoji: "👥"
+      },
+      {
+        label: "Partnership Support",
+        description: "Partnerships & affiliations",
+        value: "partnership_support",
+        emoji: "🤝"
+      },
+      {
+        label: "Internal Affairs",
+        description: "Reports & complaints",
+        value: "ia_support",
+        emoji: "🛡️"
+      },
+      {
+        label: "Management Support",
+        description: "High-level assistance",
+        value: "management_support",
+        emoji: "👑"
+      }
+    );
 
-    new ButtonBuilder()
-      .setCustomId("partnership_support")
-      .setLabel("Partnership Support")
-      .setStyle(ButtonStyle.Secondary),
-
-    new ButtonBuilder()
-      .setCustomId("ia_support")
-      .setLabel("Internal Affairs")
-      .setStyle(ButtonStyle.Secondary),
-
-    new ButtonBuilder()
-      .setCustomId("management_support")
-      .setLabel("Management Support")
-      .setStyle(ButtonStyle.Danger)
-  );
+  const row = new ActionRowBuilder().addComponents(menu);
 
   return { embeds: [embed], components: [row] };
 }
@@ -85,7 +91,7 @@ client.once("ready", () => {
 });
 
 // =====================
-// MESSAGE COMMANDS
+// PREFIX COMMAND
 // =====================
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
@@ -93,13 +99,9 @@ client.on("messageCreate", async (message) => {
 
   const command = message.content.slice(PREFIX.length).toLowerCase();
 
-  // =====================
-  // !sendpanel (ADMIN ONLY)
-  // =====================
+  // ADMIN ONLY
   if (command === "sendpanel") {
-    if (
-      !message.member.permissions.has(PermissionsBitField.Flags.Administrator)
-    ) {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply("❌ You do not have permission to do this.");
     }
 
@@ -109,17 +111,19 @@ client.on("messageCreate", async (message) => {
 });
 
 // =====================
-// BUTTON INTERACTIONS
+// INTERACTIONS
 // =====================
 client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isButton()) return;
-
-  const { guild, user, customId } = interaction;
 
   // =====================
-  // CREATE TICKET
+  // CATEGORY SELECT
   // =====================
-  if (CATEGORIES[customId]) {
+  if (interaction.isStringSelectMenu()) {
+    if (interaction.customId !== "ticket_category") return;
+
+    const { guild, user } = interaction;
+    const choice = interaction.values[0];
+
     const existing = guild.channels.cache.find(
       c => c.name === `ticket-${user.id}`
     );
@@ -133,7 +137,7 @@ client.on("interactionCreate", async (interaction) => {
 
     const channel = await guild.channels.create({
       name: `ticket-${user.id}`,
-      parent: CATEGORIES[customId],
+      parent: CATEGORIES[choice],
       permissionOverwrites: [
         { id: guild.roles.everyone, deny: [PermissionsBitField.Flags.ViewChannel] },
         { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
@@ -146,7 +150,7 @@ client.on("interactionCreate", async (interaction) => {
       .setTitle("🎟️ Support Ticket")
       .setDescription(
         `**User:** <@${user.id}>\n` +
-        `**Category:** ${customId.replace("_", " ").toUpperCase()}\n` +
+        `**Category:** ${choice.replace("_", " ").toUpperCase()}\n` +
         `**Claimed By:** ❌ Unclaimed\n\n` +
         "Please describe your issue in detail."
       );
@@ -166,8 +170,10 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   // =====================
-  // STAFF CHECK
+  // BUTTONS (STAFF)
   // =====================
+  if (!interaction.isButton()) return;
+
   const isStaff =
     interaction.member.roles.cache.has(SUPPORT_ROLE_ID) ||
     interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
@@ -179,7 +185,7 @@ client.on("interactionCreate", async (interaction) => {
   const message = interaction.message;
   const embed = EmbedBuilder.from(message.embeds[0]);
 
-  if (customId === "claim_ticket") {
+  if (interaction.customId === "claim_ticket") {
     embed.setDescription(
       embed.data.description.replace(
         /\*\*Claimed By:\*\*.*\n/,
@@ -190,7 +196,7 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "✅ Ticket claimed.", ephemeral: true });
   }
 
-  if (customId === "unclaim_ticket") {
+  if (interaction.customId === "unclaim_ticket") {
     embed.setDescription(
       embed.data.description.replace(
         /\*\*Claimed By:\*\*.*\n/,
@@ -201,7 +207,7 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "🔓 Ticket unclaimed.", ephemeral: true });
   }
 
-  if (customId === "close_ticket") {
+  if (interaction.customId === "close_ticket") {
     await interaction.reply("🔒 Closing ticket...");
     setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
   }
