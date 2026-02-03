@@ -118,16 +118,42 @@ client.on("interactionCreate", async (interaction) => {
         });
       }
 
-      const channel = await guild.channels.create({
-        name: `ticket-${user.id}`,
-        parent: CATEGORIES[choice],
-        topic: "CLAIMED:none",
-        permissionOverwrites: [
-          { id: guild.roles.everyone, deny: [PermissionsBitField.Flags.ViewChannel] },
-          { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-          { id: SUPPORT_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
-        ]
-      });
+const supportRole = await guild.roles.fetch(SUPPORT_ROLE_ID);
+
+if (!supportRole) {
+  return interaction.reply({
+    content: "❌ Support role not found. Please contact management.",
+    ephemeral: true
+  });
+}
+
+const channel = await guild.channels.create({
+  name: `ticket-${user.id}`,
+  parent: CATEGORIES[choice],
+  topic: "CLAIMED:none",
+  permissionOverwrites: [
+    {
+      id: guild.roles.everyone.id, // ✅ FIXED
+      deny: [PermissionsBitField.Flags.ViewChannel],
+    },
+    {
+      id: user.id,
+      allow: [
+        PermissionsBitField.Flags.ViewChannel,
+        PermissionsBitField.Flags.SendMessages,
+        PermissionsBitField.Flags.ReadMessageHistory,
+      ],
+    },
+    {
+      id: supportRole.id, // ✅ VERIFIED ROLE
+      allow: [
+        PermissionsBitField.Flags.ViewChannel,
+        PermissionsBitField.Flags.SendMessages,
+        PermissionsBitField.Flags.ReadMessageHistory,
+      ],
+    },
+  ],
+});
 
       // 🔔 Ping staff + user
       await channel.send(`<@&${SUPPORT_ROLE_ID}> | <@${user.id}>`);
