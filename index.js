@@ -227,15 +227,16 @@ client.on("interactionCreate", async (interaction) => {
       setTimeout(() => channel.delete().catch(() => {}), 2000);
     }
 
-  } catch (err) {
-    console.error("Interaction Error:", err);
-    if (!interaction.replied && !interaction.deferred) {
-      interaction.reply({
-        content: "❌ An error occurred. Please contact staff.",
-        ephemeral: true
-      }).catch(() => {});
-    }
+} catch (err) {
+  console.error("🔥 TICKET ERROR 🔥", err);
+
+  if (!interaction.replied && !interaction.deferred) {
+    interaction.reply({
+      content: `❌ Ticket creation failed.\n**Reason:** \`${err.message}\``,
+      ephemeral: true
+    }).catch(() => {});
   }
+}
 });
 
 // =====================
