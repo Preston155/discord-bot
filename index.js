@@ -126,9 +126,14 @@ if (!supportRole) {
     ephemeral: true
   });
 }
+const cleanName = user.username
+  .toLowerCase()
+  .replace(/[^a-z0-9]/g, "");
+
+const ticketNumber = Math.floor(1000 + Math.random() * 9000);
 
 const channel = await guild.channels.create({
-  name: `ticket-${user.id}`,
+  name: `${cleanName}-${ticketNumber}`,
   parent: CATEGORIES[choice],
   topic: "CLAIMED:none",
   permissionOverwrites: [
