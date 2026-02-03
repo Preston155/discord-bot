@@ -21,7 +21,7 @@ const client = new Client({
 // CONFIG
 // =====================
 const PREFIX = "!";
-const SUPPORT_ROLE_ID = "PASTE_SUPPORT_ROLE_ID"; // REQUIRED
+const SUPPORT_ROLE_ID = "PASTE_SUPPORT_ROLE_ID"; // REQUIRED (REAL ROLE ID)
 
 // Ticket Categories
 const CATEGORIES = {
@@ -32,10 +32,10 @@ const CATEGORIES = {
 };
 
 // =====================
-// SSU VOTE STORAGE
+// SESSION POLL STORAGE
 // =====================
-const ssuVotes = new Map();
-// messageId => { yes: Set(), no: Set() }
+const sessionPolls = new Map();
+// messageId => { voters: Set() }
 
 // =====================
 // BUILD TICKET PANEL
@@ -49,7 +49,7 @@ function buildPanel() {
       "Use the dropdown below to open a support ticket.\n\n" +
       "**Rules:**\n" +
       "• One issue per ticket\n" +
-      "• Be respectful\n" +
+      "• Be respectful at all times\n" +
       "• Do NOT ping staff manually\n\n" +
       "**Categories:**\n" +
       "👥 General Support\n" +
@@ -98,47 +98,44 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // SSU VOTE
+  // SESSION POLL
   if (message.content === "!ssuvote") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return message.reply("❌ Admins only.");
+      return message.reply("❌ Staff only.");
     }
 
     const embed = new EmbedBuilder()
-      .setColor("#00b0f4")
-      .setTitle("🚨 SSU Vote")
+      .setColor("#2ecc71")
+      .setTitle("📊 Session Poll")
       .setDescription(
-        "**Should we start a Server Startup (SSU)?**\n\n" +
-        "**Votes:** 0 / 5"
+        "**Session Poll!**\n\n" +
+        "Click below if you can attend.\n\n" +
+        "🟢 **5× votes needed**"
       )
-      .setFooter({ text: "Click a button below to vote" });
+      .setFooter({ text: "Lake County Roleplay" });
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId("ssu_yes")
-        .setLabel("Vote Yes")
+        .setCustomId("session_attend")
+        .setLabel("Attend (0/5)")
         .setStyle(ButtonStyle.Success),
 
       new ButtonBuilder()
-        .setCustomId("ssu_no")
-        .setLabel("Vote No")
-        .setStyle(ButtonStyle.Danger),
-
-      new ButtonBuilder()
-        .setCustomId("ssu_view")
-        .setLabel("View Voters")
+        .setCustomId("session_view")
+        .setLabel("View Votes")
         .setStyle(ButtonStyle.Secondary)
     );
 
-    const voteMessage = await message.channel.send({
+    const pollMessage = await message.channel.send({
       embeds: [embed],
       components: [row]
     });
 
-    ssuVotes.set(voteMessage.id, {
-      yes: new Set(),
-      no: new Set()
+    sessionPolls.set(pollMessage.id, {
+      voters: new Set()
     });
+
+    await message.delete().catch(() => {});
   }
 });
 
@@ -207,8 +204,10 @@ client.on("interactionCreate", async (interaction) => {
       const channel = interaction.channel;
       const claimedId = (channel.topic || "CLAIMED:none").split(":")[1];
 
-      if (!interaction.member.roles.cache.has(SUPPORT_ROLE_ID) &&
-          !interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      if (
+        !interaction.member.roles.cache.has(SUPPORT_ROLE_ID) &&
+        !interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)
+      ) {
         return interaction.reply({ content: "❌ Staff only.", ephemeral: true });
       }
 
@@ -260,63 +259,69 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     // =====================
-    // SSU VOTE BUTTONS
+    // SESSION POLL BUTTONS
     // =====================
-    if (interaction.isButton() && interaction.customId.startsWith("ssu_")) {
-      const data = ssuVotes.get(interaction.message.id);
-      if (!data) return;
+    if (interaction.isButton() && interaction.customId.startsWith("session_")) {
+      const poll = sessionPolls.get(interaction.message.id);
+      if (!poll) return;
 
       const userId = interaction.user.id;
-      const totalVotes = data.yes.size + data.no.size;
 
-      // VIEW VOTERS
-      if (interaction.customId === "ssu_view") {
-        const yesList = [...data.yes].map(id => `<@${id}>`).join("\n") || "None";
-        const noList = [...data.no].map(id => `<@${id}>`).join("\n") || "None";
+      // VIEW VOTES
+      if (interaction.customId === "session_view") {
+        const list =
+          poll.voters.size > 0
+            ? [...poll.voters].map(id => `<@${id}>`).join("\n")
+            : "No votes yet.";
 
         return interaction.reply({
           embeds: [
             new EmbedBuilder()
-              .setColor("#00b0f4")
-              .setTitle("📊 SSU Vote Details")
-              .addFields(
-                { name: "✅ Yes Votes", value: yesList, inline: true },
-                { name: "❌ No Votes", value: noList, inline: true }
-              )
+              .setColor("#2ecc71")
+              .setTitle("👥 Session Votes")
+              .setDescription(list)
           ],
           ephemeral: true
         });
       }
 
-      if (totalVotes >= 5) {
+      // LOCK AT 5
+      if (poll.voters.size >= 5) {
         return interaction.reply({
-          content: "🔒 Voting closed (5 / 5 reached).",
+          content: "🔒 Voting is closed (5/5 reached).",
           ephemeral: true
         });
       }
 
-      if (data.yes.has(userId) || data.no.has(userId)) {
+      // PREVENT DOUBLE VOTE
+      if (poll.voters.has(userId)) {
         return interaction.reply({
           content: "❌ You already voted.",
           ephemeral: true
         });
       }
 
-      if (interaction.customId === "ssu_yes") data.yes.add(userId);
-      if (interaction.customId === "ssu_no") data.no.add(userId);
+      // ADD VOTE
+      poll.voters.add(userId);
 
-      const newTotal = data.yes.size + data.no.size;
+      const count = poll.voters.size;
 
-      const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
-        .setDescription(
-          "**Should we start a Server Startup (SSU)?**\n\n" +
-          `**Votes:** ${newTotal} / 5`
-        );
+      const updatedRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("session_attend")
+          .setLabel(`Attend (${count}/5)`)
+          .setStyle(ButtonStyle.Success),
 
-      await interaction.message.edit({ embeds: [updatedEmbed] });
+        new ButtonBuilder()
+          .setCustomId("session_view")
+          .setLabel("View Votes")
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      await interaction.message.edit({ components: [updatedRow] });
 
       return interaction.reply({
-        content: "✅ Your vote has been recorded.",
+        content: "✅ Your attendance has been recorded.",
         ephemeral: true
       });
     }
