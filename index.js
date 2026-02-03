@@ -21,7 +21,7 @@ const client = new Client({
 // CONFIG
 // =====================
 const PREFIX = "!";
-const SUPPORT_ROLE_ID = "PASTE_SUPPORT_ROLE_ID"; // REQUIRED
+const SUPPORT_ROLE_ID = "1282417060391161978"; // REQUIRED
 const SSU_PING_ROLE_ID = null; // null = @everyone
 const SESSION_BANNER_URL =
   "https://media.discordapp.net/attachments/1452829338545160285/1466919030127591613/ILLEGAL_FIREARM_1.png";
@@ -262,3 +262,4 @@ client.on("interactionCreate", async (interaction) => {
 // LOGIN
 // =====================
 client.login(process.env.TOKEN);
+
