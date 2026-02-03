@@ -164,6 +164,47 @@ client.on("interactionCreate", async (interaction) => {
         ],
       });
 
+      // 🔔 Ping support role + user
+await channel.send(`<@&${supportRole.id}> | <@${user.id}>`);
+
+// 🎟️ Ticket embed
+const ticketEmbed = new EmbedBuilder()
+  .setColor("#00b0f4")
+  .setTitle("🎟️ Support Ticket Created")
+  .setDescription(
+    "**Your ticket has been successfully created.**\n\n" +
+    "Please provide a **clear and detailed explanation** of your issue so staff can assist you efficiently.\n\n" +
+    `**User:** <@${user.id}>\n` +
+    `**Category:** ${choice.replace("_", " ").toUpperCase()}\n` +
+    "**Status:** 🟡 Open\n" +
+    "**Claimed By:** ❌ Unclaimed"
+  )
+  .setFooter({ text: "Lake County Roleplay • Ticket System" });
+
+// 🎛️ Control buttons
+const controls = new ActionRowBuilder().addComponents(
+  new ButtonBuilder()
+    .setCustomId("claim")
+    .setLabel("Claim Ticket")
+    .setStyle(ButtonStyle.Success),
+
+  new ButtonBuilder()
+    .setCustomId("unclaim")
+    .setLabel("Unclaim Ticket")
+    .setStyle(ButtonStyle.Secondary),
+
+  new ButtonBuilder()
+    .setCustomId("close")
+    .setLabel("Close Ticket")
+    .setStyle(ButtonStyle.Danger)
+);
+
+// 📤 Send embed + buttons
+await channel.send({
+  embeds: [ticketEmbed],
+  components: [controls],
+});
+
       await channel.send(`<@&${supportRole.id}> | <@${user.id}>`);
 
       return interaction.reply({
