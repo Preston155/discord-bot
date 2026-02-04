@@ -25,16 +25,15 @@ const client = new Client({
 ===================== */
 const PREFIX = "!";
 const SUPPORT_ROLE_ID = "1282417060391161978";
-const SSU_ROLE_PING = "PUT_ROLE_ID_HERE"; // role pinged on SSU
-const SSU_PING_EVERYONE = true;
-
-const SESSION_BANNER_URL =
-  "https://media.discordapp.net/attachments/1452829338545160285/1466919030127591613/ILLEGAL_FIREARM_1.png";
+const SSU_ROLE_PING = "1468213717035384882";
 
 const SERVER_INFO = {
   code: "ILCRPC",
   owner: "MiningMavenYT"
 };
+
+const SESSION_BANNER_URL =
+  "https://media.discordapp.net/attachments/1452829338545160285/1466919030127591613/ILLEGAL_FIREARM_1.png";
 
 const CATEGORIES = {
   general_support: "1468276842942435338",
@@ -112,7 +111,7 @@ client.once("ready", () => {
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
-  /* ---- XP ---- */
+  // XP
   const lvl = addXp(message.author.id);
   if (lvl) {
     message.channel.send({
@@ -129,7 +128,7 @@ client.on("messageCreate", async (message) => {
   const args = message.content.slice(PREFIX.length).split(/ +/);
   const cmd = args.shift().toLowerCase();
 
-  /* ---- !LEVEL ---- */
+  // !level
   if (cmd === "level") {
     const u = message.mentions.users.first() || message.author;
     if (!levels[u.id]) levels[u.id] = { xp: 0, level: 1, lastXp: 0 };
@@ -138,7 +137,7 @@ client.on("messageCreate", async (message) => {
       embeds: [
         new EmbedBuilder()
           .setColor("#3498db")
-          .setTitle("📈 User Level")
+          .setTitle("📈 Level Info")
           .setDescription(
             `**User:** ${u}\n` +
             `**Level:** ${levels[u.id].level}\n` +
@@ -148,7 +147,7 @@ client.on("messageCreate", async (message) => {
     });
   }
 
-  /* ---- SEND TICKET PANEL ---- */
+  // !sendpanel
   if (cmd === "sendpanel") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
 
@@ -156,18 +155,18 @@ client.on("messageCreate", async (message) => {
       .setColor("#0ea5e9")
       .setTitle("🏛️ Lake County Roleplay | Support Center")
       .setDescription(
-        "Open a ticket using the menu below.\n\n" +
+        "Select a department below to open a ticket.\n\n" +
         "• One issue per ticket\n• Be respectful\n• Do not ping staff"
       );
 
     const menu = new StringSelectMenuBuilder()
       .setCustomId("ticket_category")
-      .setPlaceholder("Select a support category…")
+      .setPlaceholder("Select a department…")
       .addOptions(
         { label: "General Support", value: "general_support", emoji: "👥" },
-        { label: "Partnership Support", value: "partnership_support", emoji: "🤝" },
+        { label: "Partnership", value: "partnership_support", emoji: "🤝" },
         { label: "Internal Affairs", value: "ia_support", emoji: "🛡️" },
-        { label: "Management Support", value: "management_support", emoji: "👑" }
+        { label: "Management", value: "management_support", emoji: "👑" }
       );
 
     await message.channel.send({
@@ -178,19 +177,17 @@ client.on("messageCreate", async (message) => {
     await message.delete().catch(() => {});
   }
 
-  /* ---- SSU POLL ---- */
+  // !ssuvote
   if (cmd === "ssuvote") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
       return message.reply("❌ Staff only.");
-    }
 
     const embed = new EmbedBuilder()
       .setColor("#16a34a")
       .setTitle("🚨 Server Startup Vote")
       .setDescription(
-        "**SSU Availability Poll**\n\n" +
-        "Vote below to indicate availability.\n\n" +
-        "**Auto-starts at 5 Attending.**"
+        "Click below to indicate availability.\n\n" +
+        "**Auto-starts at 5 attending.**"
       )
       .setImage(SESSION_BANNER_URL);
 
@@ -201,20 +198,19 @@ client.on("messageCreate", async (message) => {
     );
 
     const msg = await message.channel.send({ embeds: [embed], components: [row] });
-
     polls[msg.id] = { attend: [], cant: [], started: false };
     save(FILES.polls, polls);
-    await message.delete().catch(() => {});
   }
 
-  /* ---- SSU START ---- */
+  // !ssu
   if (cmd === "ssu") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
+      return message.reply("❌ Staff only.");
 
     const lastPoll = Object.values(polls).reverse().find(p => p.attend.length);
-    const mentions = lastPoll
-      ? lastPoll.attend.map(id => `<@${id}>`).join(" ")
-      : "";
+    if (!lastPoll) return message.reply("❌ No SSU poll found.");
+
+    const mentions = lastPoll.attend.map(id => `<@${id}>`).join(" ");
 
     const embed = new EmbedBuilder()
       .setColor("#22c55e")
@@ -228,14 +224,15 @@ client.on("messageCreate", async (message) => {
       );
 
     await message.channel.send({
-      content: `${SSU_PING_EVERYONE ? "@everyone" : ""} ${SSU_ROLE_PING ? `<@&${SSU_ROLE_PING}>` : ""}\n${mentions}`,
+      content: `${SSU_ROLE_PING ? `<@&${SSU_ROLE_PING}>` : ""}\n${mentions}`,
       embeds: [embed]
     });
   }
 
-  /* ---- SSD ---- */
+  // !ssd
   if (cmd === "ssd") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
+      return message.reply("❌ Staff only.");
 
     const embed = new EmbedBuilder()
       .setColor("#dc2626")
@@ -255,57 +252,121 @@ client.on("messageCreate", async (message) => {
    INTERACTIONS
 ===================== */
 client.on("interactionCreate", async (interaction) => {
-  try {
+  if (interaction.isStringSelectMenu() && interaction.customId === "ticket_category") {
+    await interaction.deferReply({ ephemeral: true });
 
-    /* ---- POLL BUTTONS ---- */
-    if (interaction.isButton() && polls[interaction.message.id]) {
-      await interaction.deferReply({ ephemeral: true });
-      const poll = polls[interaction.message.id];
-      const uid = interaction.user.id;
+    const { guild, user } = interaction;
+    const cat = interaction.values[0];
+    const name = `${user.username.toLowerCase().replace(/[^a-z0-9]/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const role = await guild.roles.fetch(SUPPORT_ROLE_ID);
 
-      if (interaction.customId === "view") {
-        return interaction.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("👀 Voters")
-              .addFields(
-                { name: "Attend", value: poll.attend.map(id => `<@${id}>`).join("\n") || "None" },
-                { name: "Can't Attend", value: poll.cant.map(id => `<@${id}>`).join("\n") || "None" }
-              )
-          ]
-        });
-      }
+    const channel = await guild.channels.create({
+      name,
+      parent: CATEGORIES[cat],
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+        { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+        { id: role.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+      ]
+    });
 
-      if (interaction.customId === "attend") {
-        poll.attend.includes(uid)
-          ? poll.attend = poll.attend.filter(i => i !== uid)
-          : (poll.cant = poll.cant.filter(i => i !== uid), poll.attend.push(uid));
-      }
+    tickets[channel.id] = { owner: user.id, claimed: null };
+    save(FILES.tickets, tickets);
 
-      if (interaction.customId === "cant") {
-        poll.cant.includes(uid)
-          ? poll.cant = poll.cant.filter(i => i !== uid)
-          : (poll.attend = poll.attend.filter(i => i !== uid), poll.cant.push(uid));
-      }
+    const embed = new EmbedBuilder()
+      .setColor("#22c55e")
+      .setTitle("🎟️ Support Ticket Created")
+      .setDescription(
+        `**User:** <@${user.id}>\n` +
+        "**Status:** 🟡 Open\n" +
+        "**Claimed By:** ❌ Unclaimed"
+      );
 
-      if (poll.attend.length >= 5) poll.started = true;
-      save(FILES.polls, polls);
+    const buttons = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("claim").setLabel("Claim").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("unclaim").setLabel("Unclaim").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("close").setLabel("Close").setStyle(ButtonStyle.Danger)
+    );
 
-      await interaction.message.edit({
-        components: [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId("attend").setLabel(`Attend (${poll.attend.length}/5)`).setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId("cant").setLabel(`Can’t Attend (${poll.cant.length})`).setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId("view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
-          )
-        ]
-      });
+    await channel.send(`<@&${role.id}> <@${user.id}>`);
+    await channel.send({ embeds: [embed], components: [buttons] });
 
-      return interaction.editReply("✅ Vote updated.");
+    return interaction.editReply(`✅ Ticket created: ${channel}`);
+  }
+
+  if (interaction.isButton() && tickets[interaction.channelId]) {
+    await interaction.deferReply({ ephemeral: true });
+    const ticket = tickets[interaction.channelId];
+
+    if (!interaction.member.roles.cache.has(SUPPORT_ROLE_ID))
+      return interaction.editReply("❌ Staff only.");
+
+    if (interaction.customId === "claim") ticket.claimed = interaction.user.id;
+    if (interaction.customId === "unclaim") ticket.claimed = null;
+    if (interaction.customId === "close") {
+      delete tickets[interaction.channelId];
+      save(FILES.tickets, tickets);
+      await interaction.editReply("🔒 Closing ticket...");
+      return setTimeout(() => interaction.channel.delete(), 2000);
     }
 
-  } catch (e) {
-    console.error("INTERACTION ERROR:", e);
+    save(FILES.tickets, tickets);
+
+    const embed = new EmbedBuilder()
+      .setColor("#0ea5e9")
+      .setTitle("🎟️ Support Ticket")
+      .setDescription(
+        `**User:** <@${ticket.owner}>\n` +
+        `**Claimed By:** ${ticket.claimed ? `<@${ticket.claimed}>` : "❌ Unclaimed"}`
+      );
+
+    await interaction.message.edit({ embeds: [embed] });
+    return interaction.editReply("✅ Updated.");
+  }
+
+  if (interaction.isButton() && polls[interaction.message.id]) {
+    await interaction.deferReply({ ephemeral: true });
+    const poll = polls[interaction.message.id];
+    const uid = interaction.user.id;
+
+    if (interaction.customId === "view") {
+      return interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle("👀 Voters")
+            .addFields(
+              { name: "Attend", value: poll.attend.map(id => `<@${id}>`).join("\n") || "None" },
+              { name: "Can’t Attend", value: poll.cant.map(id => `<@${id}>`).join("\n") || "None" }
+            )
+        ]
+      });
+    }
+
+    if (interaction.customId === "attend") {
+      poll.attend.includes(uid)
+        ? poll.attend = poll.attend.filter(i => i !== uid)
+        : (poll.cant = poll.cant.filter(i => i !== uid), poll.attend.push(uid));
+    }
+
+    if (interaction.customId === "cant") {
+      poll.cant.includes(uid)
+        ? poll.cant = poll.cant.filter(i => i !== uid)
+        : (poll.attend = poll.attend.filter(i => i !== uid), poll.cant.push(uid));
+    }
+
+    save(FILES.polls, polls);
+
+    await interaction.message.edit({
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId("attend").setLabel(`Attend (${poll.attend.length}/5)`).setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId("cant").setLabel(`Can’t Attend (${poll.cant.length})`).setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId("view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
+        )
+      ]
+    });
+
+    return interaction.editReply("✅ Vote updated.");
   }
 });
 
