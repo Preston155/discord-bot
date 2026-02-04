@@ -193,18 +193,16 @@ client.on("guildMemberAdd", async (member) => {
   const count = member.guild.memberCount;
 
   const message =
-    `👋🏽 \`\` - \`\` Welcome ${member} to **Lake County Roleplay!** ` +
+    `:wavinghand: \`\` - \`\` Welcome ${member} to **Lake County Roleplay!** ` +
     `You are our **${count}** member, we hope you enjoy your stay!\n` +
     `-# Ensure to verify to gain access to all of our channels and stop in-game Private Messages.`;
 
   const row = new ActionRowBuilder().addComponents(
-    // VERIFY LINK BUTTON
     new ButtonBuilder()
       .setLabel("Verify")
       .setStyle(ButtonStyle.Link)
       .setURL("https://blox.link/"),
 
-    // MEMBER COUNT (DISABLED)
     new ButtonBuilder()
       .setLabel(`👥 Members: ${count}`)
       .setStyle(ButtonStyle.Secondary)
@@ -216,8 +214,6 @@ client.on("guildMemberAdd", async (member) => {
     components: [row]
   });
 });
-
-
 
 // =====================
 // MESSAGE CREATE
