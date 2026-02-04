@@ -394,6 +394,7 @@ embeds: [
     .setFooter({
       text: "Lake County Roleplay • Support Ticket System"
     })
+    .setImage(SESSION_BANNER_URL)
 ],
       components: [buttons]
     });
