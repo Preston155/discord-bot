@@ -37,6 +37,9 @@ const MOD_LOG_CHANNEL_ID = "1461008751749234740";
 
 const LEVEL_UP_CHANNEL_ID = "1467677377319534662";
 
+const WELCOME_CHANNEL_ID = "1461003360999047300";
+const VERIFY_ROLE_ID = "1271940172237242461"; // role they get after verifying
+
 const SERVER_INFO = { code: "ILCRPC", owner: "MiningMavenYT" };
 const SESSION_BANNER_URL =
   "https://media.discordapp.net/attachments/1452829338545160285/1466919030127591613/ILLEGAL_FIREARM_1.png";
@@ -181,6 +184,42 @@ function addXP(id) {
 // =====================
 client.once("ready", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
+});
+
+client.on("guildMemberAdd", async (member) => {
+  const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
+  if (!channel) return;
+
+  const embed = new EmbedBuilder()
+    .setColor("#2563eb")
+    .setTitle("👋 Welcome to Lake County Roleplay!")
+    .setDescription(
+      `Welcome ${member} to **Lake County Roleplay**!\n\n` +
+      `You are our **${member.guild.memberCount}th member** — we hope you enjoy your stay!\n\n` +
+      "🔹 **Next Steps**\n" +
+      "• Please verify to gain access to all channels\n" +
+      "• Make sure DMs are open for staff support\n" +
+      "• Review the server rules before participating\n\n" +
+      "_Failure to verify may result in limited access._"
+    )
+    .setFooter({
+      text: "Lake County Roleplay • Welcome System"
+    })
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("verify_member")
+      .setLabel("Verify")
+      .setStyle(ButtonStyle.Success)
+      .setEmoji("✅")
+  );
+
+  channel.send({
+    content: `${member}`,
+    embeds: [embed],
+    components: [row]
+  });
 });
 
 // =====================
@@ -438,6 +477,35 @@ client.on("interactionCreate", async (interaction) => {
 
     return interaction.reply({ content: "✅ Ticket created.", ephemeral: true });
   }
+
+  // =====================
+// VERIFY BUTTON
+// =====================
+if (interaction.isButton() && interaction.customId === "verify_member") {
+  const member = interaction.member;
+
+  if (member.roles.cache.has(VERIFY_ROLE_ID)) {
+    return interaction.reply({
+      content: "✅ You are already verified!",
+      ephemeral: true
+    });
+  }
+
+  try {
+    await member.roles.add(VERIFY_ROLE_ID);
+
+    await interaction.reply({
+      content: "🎉 You have been verified! Welcome to Lake County Roleplay.",
+      ephemeral: true
+    });
+  } catch (err) {
+    console.error(err);
+    return interaction.reply({
+      content: "❌ Failed to verify. Please contact staff.",
+      ephemeral: true
+    });
+  }
+}
 
   // =====================
 // STAFF DASHBOARD BUTTONS
