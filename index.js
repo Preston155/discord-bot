@@ -1,6 +1,3 @@
-// =====================
-// IMPORTS
-// =====================
 const {
   Client,
   GatewayIntentBits,
@@ -11,8 +8,7 @@ const {
   ButtonStyle,
   StringSelectMenuBuilder
 } = require("discord.js");
-const fs = require("fs");
-const path = require("path");
+const sqlite3 = require("sqlite3").verbose();
 
 // =====================
 // CLIENT
@@ -47,47 +43,56 @@ const CATEGORIES = {
 };
 
 // =====================
-// DATA STORAGE
+// DATABASE
 // =====================
-const DATA_DIR = path.join(__dirname, "data");
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
+const db = new sqlite3.Database("./bot.db");
 
-const FILES = {
-  polls: "polls.json",
-  tickets: "tickets.json",
-  levels: "levels.json",
-  moderation: "moderation.json",
-  cases: "cases.json"
-};
+db.serialize(() => {
+  db.run(`CREATE TABLE IF NOT EXISTS levels (
+    userId TEXT PRIMARY KEY,
+    xp INTEGER,
+    level INTEGER,
+    lastXp INTEGER
+  )`);
 
-for (const f of Object.values(FILES)) {
-  const p = path.join(DATA_DIR, f);
-  if (!fs.existsSync(p)) fs.writeFileSync(p, "{}");
-}
+  db.run(`CREATE TABLE IF NOT EXISTS tickets (
+    channelId TEXT PRIMARY KEY,
+    ownerId TEXT,
+    claimedBy TEXT
+  )`);
 
-const load = (f) => JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), "utf8"));
-const save = (f, d) =>
-  fs.writeFileSync(path.join(DATA_DIR, f), JSON.stringify(d, null, 2));
+  db.run(`CREATE TABLE IF NOT EXISTS polls (
+    messageId TEXT PRIMARY KEY,
+    createdAt INTEGER
+  )`);
 
-let polls = load(FILES.polls);
-let tickets = load(FILES.tickets);
-let levels = load(FILES.levels);
-let moderation = load(FILES.moderation);
-let cases = load(FILES.cases);
-if (!cases.lastCase) cases.lastCase = 0;
+  db.run(`CREATE TABLE IF NOT EXISTS poll_votes (
+    messageId TEXT,
+    userId TEXT,
+    vote TEXT,
+    PRIMARY KEY (messageId, userId)
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS cases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT,
+    target TEXT,
+    moderator TEXT,
+    reason TEXT,
+    time INTEGER
+  )`);
+});
 
 // =====================
 // HELPERS
 // =====================
-function isStaff(member) {
-  return member.roles.cache.has(STAFF_ROLE_ID);
-}
+const isStaff = (m) => m.roles.cache.has(STAFF_ROLE_ID);
 
-async function resolveTarget(message, argIndex = 0) {
-  const mention = message.mentions.members.first();
-  if (mention) return mention;
+async function resolveTarget(message) {
+  if (message.mentions.members.first())
+    return message.mentions.members.first();
 
-  const id = message.content.split(/\s+/)[argIndex + 1];
+  const id = message.content.split(/\s+/)[1];
   if (!id) return null;
 
   try {
@@ -97,12 +102,12 @@ async function resolveTarget(message, argIndex = 0) {
   }
 }
 
-function createCase(action, target, moderator, reason) {
-  cases.lastCase++;
-  const id = cases.lastCase;
-
-  cases[id] = { action, target, moderator, reason, time: Date.now() };
-  save(FILES.cases, cases);
+function logCase(action, target, moderator, reason) {
+  db.run(
+    `INSERT INTO cases (action, target, moderator, reason, time)
+     VALUES (?, ?, ?, ?, ?)`,
+    [action, target, moderator, reason, Date.now()]
+  );
 
   const log = client.channels.cache.get(MOD_LOG_CHANNEL_ID);
   if (log) {
@@ -110,7 +115,7 @@ function createCase(action, target, moderator, reason) {
       embeds: [
         new EmbedBuilder()
           .setColor("#dc2626")
-          .setTitle(`📁 Case #${id}`)
+          .setTitle("📁 Moderation Case")
           .addFields(
             { name: "Action", value: action, inline: true },
             { name: "User", value: `<@${target}>`, inline: true },
@@ -121,7 +126,6 @@ function createCase(action, target, moderator, reason) {
       ]
     });
   }
-  return id;
 }
 
 // =====================
@@ -135,24 +139,40 @@ function xpForLevel(lvl) {
   return Math.floor(100 * lvl * 1.5);
 }
 
-function addXP(id) {
+function addXP(message) {
   const now = Date.now();
-  if (!levels[id]) levels[id] = { xp: 0, level: 1, last: 0 };
-  if (now - levels[id].last < XP_COOLDOWN) return null;
+  const userId = message.author.id;
 
-  const gain = Math.floor(Math.random() * (XP_MAX - XP_MIN + 1)) + XP_MIN;
-  levels[id].xp += gain;
-  levels[id].last = now;
+  db.get(`SELECT * FROM levels WHERE userId = ?`, [userId], (e, row) => {
+    if (!row) {
+      db.run(`INSERT INTO levels VALUES (?, 0, 1, 0)`, [userId]);
+      return;
+    }
 
-  let leveled = false;
-  while (levels[id].xp >= xpForLevel(levels[id].level)) {
-    levels[id].xp -= xpForLevel(levels[id].level);
-    levels[id].level++;
-    leveled = true;
-  }
+    if (now - row.lastXp < XP_COOLDOWN) return;
 
-  save(FILES.levels, levels);
-  return leveled ? levels[id].level : null;
+    let xp =
+      row.xp + Math.floor(Math.random() * (XP_MAX - XP_MIN + 1)) + XP_MIN;
+    let level = row.level;
+
+    while (xp >= xpForLevel(level)) {
+      xp -= xpForLevel(level);
+      level++;
+      message.channel.send({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("#facc15")
+            .setTitle("⬆️ Level Up!")
+            .setDescription(`${message.author} reached **Level ${level}**!`)
+        ]
+      });
+    }
+
+    db.run(
+      `UPDATE levels SET xp=?, level=?, lastXp=? WHERE userId=?`,
+      [xp, level, now, userId]
+    );
+  });
 }
 
 // =====================
@@ -168,17 +188,7 @@ client.once("ready", () => {
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
-  const levelUp = addXP(message.author.id);
-  if (levelUp) {
-    message.channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#facc15")
-          .setTitle("⬆️ Level Up!")
-          .setDescription(`${message.author} reached **Level ${levelUp}**!`)
-      ]
-    });
-  }
+  addXP(message);
 
   if (!message.content.startsWith(PREFIX)) return;
   const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
@@ -187,9 +197,7 @@ client.on("messageCreate", async (message) => {
   // =====================
   // SEND TICKET PANEL
   // =====================
-  if (cmd === "sendpanel") {
-    if (!isStaff(message.member)) return;
-
+  if (cmd === "sendpanel" && isStaff(message.member)) {
     const embed = new EmbedBuilder()
       .setColor("#2563eb")
       .setTitle("🎟️ Support Tickets — Lake County Roleplay")
@@ -216,9 +224,7 @@ client.on("messageCreate", async (message) => {
   // =====================
   // SSU VOTE
   // =====================
-  if (cmd === "ssuvote") {
-    if (!isStaff(message.member)) return;
-
+  if (cmd === "ssuvote" && isStaff(message.member)) {
     const embed = new EmbedBuilder()
       .setColor("#16a34a")
       .setTitle("🚨 Server Startup Vote")
@@ -226,117 +232,53 @@ client.on("messageCreate", async (message) => {
       .setImage(SESSION_BANNER_URL);
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("poll_attend").setLabel("Attend (0/5)").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("poll_cant").setLabel("Can’t Attend (0)").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("poll_attend").setLabel("Attend").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("poll_cant").setLabel("Can’t Attend").setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId("poll_view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
     );
 
     const msg = await message.channel.send({ embeds: [embed], components: [row] });
-    polls[msg.id] = { attend: [], cant: [] };
-    save(FILES.polls, polls);
+    db.run(`INSERT INTO polls VALUES (?, ?)`, [msg.id, Date.now()]);
   }
 
   // =====================
-  // SSU / SSD
-  // =====================
-  if (cmd === "ssu") {
-    if (!isStaff(message.member)) return;
+  // MODERATION
+// =====================
+if (["warn", "kick", "ban", "unban"].includes(cmd)) {
+  if (!isStaff(message.member)) return;
+}
 
-    const poll = Object.values(polls).reverse().find(p => p.attend.length);
-    if (!poll) return message.reply("❌ No SSU poll found.");
+if (cmd === "warn") {
+  const target = await resolveTarget(message);
+  if (!target) return message.reply("❌ User not found.");
+  const reason = args.join(" ") || "No reason provided";
+  logCase("Warn", target.id, message.author.id, reason);
+  message.reply(`⚠️ Warned **${target.user.tag}**`);
+}
 
-    const mentions = poll.attend.map(id => `<@${id}>`).join(" ");
+if (cmd === "kick") {
+  const target = await resolveTarget(message);
+  if (!target || !target.kickable) return message.reply("❌ Cannot kick user.");
+  await target.kick();
+  logCase("Kick", target.id, message.author.id, "Kicked");
+  message.reply(`👢 Kicked **${target.user.tag}**`);
+}
 
-    message.channel.send({
-      content: `<@&${SSU_ROLE_PING}>\n${mentions}`,
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#22c55e")
-          .setTitle("🚨 Server Startup!")
-          .setDescription(
-            `Game Code: **${SERVER_INFO.code}**\nServer Owner: **${SERVER_INFO.owner}**`
-          )
-      ]
-    });
-  }
+if (cmd === "ban") {
+  const target = await resolveTarget(message);
+  if (!target || !target.bannable) return message.reply("❌ Cannot ban user.");
+  await target.ban();
+  logCase("Ban", target.id, message.author.id, "Banned");
+  message.reply(`🔨 Banned **${target.user.tag}**`);
+}
 
-  if (cmd === "ssd") {
-    if (!isStaff(message.member)) return;
-    message.channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#dc2626")
-          .setTitle("🔕 Server Shutdown")
-          .setDescription("The server has shut down temporarily.")
-      ]
-    });
-  }
-
-  // =====================
-  // LEVEL
-  // =====================
-  if (cmd === "level") {
-    const u = message.mentions.users.first() || message.author;
-    const d = levels[u.id] || { level: 1, xp: 0 };
-    message.reply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#3b82f6")
-          .setTitle("📈 Level")
-          .setDescription(
-            `User: ${u}\nLevel: **${d.level}**\nXP: **${d.xp}/${xpForLevel(d.level)}**`
-          )
-      ]
-    });
-  }
-
-  // =====================
-  // MODERATION (STAFF ROLE)
-  // =====================
-  if (["warn", "kick", "ban", "unban"].includes(cmd)) {
-    if (!isStaff(message.member)) return;
-  }
-
-  if (cmd === "warn") {
-    const target = await resolveTarget(message);
-    if (!target) return message.reply("❌ User not found.");
-
-    const reason = args.join(" ") || "No reason provided";
-    if (!moderation[target.id]) moderation[target.id] = [];
-
-    moderation[target.id].push({ reason, mod: message.author.id, time: Date.now() });
-    save(FILES.moderation, moderation);
-
-    const id = createCase("Warn", target.id, message.author.id, reason);
-    message.reply(`⚠️ Warned **${target.user.tag}** (Case #${id})`);
-  }
-
-  if (cmd === "kick") {
-    const target = await resolveTarget(message);
-    if (!target || !target.kickable) return message.reply("❌ Cannot kick user.");
-
-    await target.kick();
-    const id = createCase("Kick", target.id, message.author.id, "Kicked");
-    message.reply(`👢 Kicked **${target.user.tag}** (Case #${id})`);
-  }
-
-  if (cmd === "ban") {
-    const target = await resolveTarget(message);
-    if (!target || !target.bannable) return message.reply("❌ Cannot ban user.");
-
-    await target.ban();
-    const id = createCase("Ban", target.id, message.author.id, "Banned");
-    message.reply(`🔨 Banned **${target.user.tag}** (Case #${id})`);
-  }
-
-  if (cmd === "unban") {
-    const uid = args[0];
-    if (!uid) return message.reply("❌ Provide a user ID.");
-
-    await message.guild.members.unban(uid);
-    const id = createCase("Unban", uid, message.author.id, "Unbanned");
-    message.reply(`✅ Unbanned <@${uid}> (Case #${id})`);
-  }
+if (cmd === "unban") {
+  const uid = args[0];
+  if (!uid) return message.reply("❌ Provide user ID.");
+  await message.guild.members.unban(uid);
+  logCase("Unban", uid, message.author.id, "Unbanned");
+  message.reply(`✅ Unbanned <@${uid}>`);
+}
 });
 
 // =====================
@@ -358,8 +300,7 @@ client.on("interactionCreate", async (interaction) => {
       ]
     });
 
-    tickets[channel.id] = { owner: user.id, claimedBy: null };
-    save(FILES.tickets, tickets);
+    db.run(`INSERT INTO tickets VALUES (?, ?, NULL)`, [channel.id, user.id]);
 
     const buttons = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("ticket_claim").setLabel("Claim").setStyle(ButtonStyle.Primary),
@@ -367,7 +308,7 @@ client.on("interactionCreate", async (interaction) => {
       new ButtonBuilder().setCustomId("ticket_close").setLabel("Close").setStyle(ButtonStyle.Danger)
     );
 
-    await channel.send({
+    channel.send({
       content: `<@${user.id}> <@&${SUPPORT_ROLE_ID}>`,
       embeds: [
         new EmbedBuilder()
@@ -378,77 +319,74 @@ client.on("interactionCreate", async (interaction) => {
       components: [buttons]
     });
 
-    return interaction.reply({ content: "✅ Ticket created.", ephemeral: true });
+    interaction.reply({ content: "✅ Ticket created.", ephemeral: true });
   }
 
   // Ticket buttons
-  if (interaction.isButton() && tickets[interaction.channelId]) {
-    const ticket = tickets[interaction.channelId];
-
+  if (interaction.isButton()) {
     if (interaction.customId === "ticket_claim") {
-      ticket.claimedBy = interaction.user.id;
-      save(FILES.tickets, tickets);
-      return interaction.reply({ content: "✅ Ticket claimed.", ephemeral: true });
+      db.run(`UPDATE tickets SET claimedBy=? WHERE channelId=?`, [
+        interaction.user.id,
+        interaction.channelId
+      ]);
+      interaction.reply({ content: "✅ Ticket claimed.", ephemeral: true });
     }
 
     if (interaction.customId === "ticket_unclaim") {
-      ticket.claimedBy = null;
-      save(FILES.tickets, tickets);
-      return interaction.reply({ content: "ℹ️ Ticket unclaimed.", ephemeral: true });
+      db.run(`UPDATE tickets SET claimedBy=NULL WHERE channelId=?`, [
+        interaction.channelId
+      ]);
+      interaction.reply({ content: "ℹ️ Ticket unclaimed.", ephemeral: true });
     }
 
     if (interaction.customId === "ticket_close") {
-      delete tickets[interaction.channelId];
-      save(FILES.tickets, tickets);
-      await interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
+      db.run(`DELETE FROM tickets WHERE channelId=?`, [
+        interaction.channelId
+      ]);
+      interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
       setTimeout(() => interaction.channel.delete(), 3000);
     }
   }
 
   // SSU vote buttons
-  if (interaction.isButton() && polls[interaction.message.id]) {
-    const poll = polls[interaction.message.id];
-    const uid = interaction.user.id;
+  if (interaction.isButton() && interaction.customId.startsWith("poll_")) {
+    const vote =
+      interaction.customId === "poll_attend"
+        ? "attend"
+        : interaction.customId === "poll_cant"
+        ? "cant"
+        : null;
+
+    if (vote) {
+      db.run(
+        `INSERT OR REPLACE INTO poll_votes VALUES (?, ?, ?)`,
+        [interaction.message.id, interaction.user.id, vote]
+      );
+      interaction.reply({ content: "✅ Vote updated.", ephemeral: true });
+    }
 
     if (interaction.customId === "poll_view") {
-      return interaction.reply({
-        ephemeral: true,
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("👀 Voters")
-            .addFields(
-              { name: "Attend", value: poll.attend.map(id => `<@${id}>`).join("\n") || "None" },
-              { name: "Can’t Attend", value: poll.cant.map(id => `<@${id}>`).join("\n") || "None" }
-            )
-        ]
-      });
+      db.all(
+        `SELECT * FROM poll_votes WHERE messageId=?`,
+        [interaction.message.id],
+        (e, rows) => {
+          const attend = rows.filter(r => r.vote === "attend").map(r => `<@${r.userId}>`).join("\n") || "None";
+          const cant = rows.filter(r => r.vote === "cant").map(r => `<@${r.userId}>`).join("\n") || "None";
+
+          interaction.reply({
+            ephemeral: true,
+            embeds: [
+              new EmbedBuilder()
+                .setTitle("👀 Voters")
+                .addFields(
+                  { name: "Attend", value: attend },
+                  { name: "Can’t Attend", value: cant }
+                )
+            ]
+          });
+        }
+      );
     }
-
-    if (interaction.customId === "poll_attend") {
-      poll.attend.includes(uid)
-        ? poll.attend = poll.attend.filter(i => i !== uid)
-        : (poll.cant = poll.cant.filter(i => i !== uid), poll.attend.push(uid));
-    }
-
-    if (interaction.customId === "poll_cant") {
-      poll.cant.includes(uid)
-        ? poll.cant = poll.cant.filter(i => i !== uid)
-        : (poll.attend = poll.attend.filter(i => i !== uid), poll.cant.push(uid));
-    }
-
-    save(FILES.polls, polls);
-
-    await interaction.message.edit({
-      components: [
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId("poll_attend").setLabel(`Attend (${poll.attend.length}/5)`).setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId("poll_cant").setLabel(`Can’t Attend (${poll.cant.length})`).setStyle(ButtonStyle.Danger),
-          new ButtonBuilder().setCustomId("poll_view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
-        )
-      ]
-    });
-
-    interaction.reply({ content: "✅ Vote updated.", ephemeral: true });
   }
 });
 
