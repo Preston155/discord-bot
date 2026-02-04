@@ -184,6 +184,52 @@ client.on("messageCreate", async (message) => {
   const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
   const cmd = args.shift().toLowerCase();
 
+// =====================
+// STAFF DASHBOARD
+// =====================
+if (cmd === "staffdashboard" && isStaff(message.member)) {
+  const openTickets = Object.keys(tickets).length;
+  const activePolls = Object.keys(polls).length;
+
+  const embed = new EmbedBuilder()
+    .setColor("#1e40af")
+    .setTitle("🧑‍💼 Staff Dashboard")
+    .setDescription(
+      "**Staff Control Panel**\n\n" +
+      "Use the buttons below to view and manage server activity.\n\n" +
+
+      "📊 **Current Overview**\n" +
+      `• Open Tickets: **${openTickets}**\n` +
+      `• Active SSU Votes: **${activePolls}**\n` +
+      `• Server Members: **${message.guild.memberCount}**`
+    )
+    .setFooter({
+      text: "Lake County Roleplay • Staff Dashboard"
+    });
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("dash_tickets")
+      .setLabel("🎟️ View Tickets")
+      .setStyle(ButtonStyle.Primary),
+
+    new ButtonBuilder()
+      .setCustomId("dash_ssu")
+      .setLabel("🚨 SSU Status")
+      .setStyle(ButtonStyle.Success),
+
+    new ButtonBuilder()
+      .setCustomId("dash_close")
+      .setLabel("Close")
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  return message.channel.send({
+    embeds: [embed],
+    components: [row]
+  });
+}
+
   // LEVEL
   if (cmd === "level") {
     const u = message.mentions.users.first() || message.author;
@@ -362,6 +408,60 @@ client.on("interactionCreate", async (interaction) => {
 
     return interaction.reply({ content: "✅ Ticket created.", ephemeral: true });
   }
+
+  // =====================
+// STAFF DASHBOARD BUTTONS
+// =====================
+if (interaction.isButton() && interaction.customId.startsWith("dash_")) {
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({
+      content: "❌ Staff only.",
+      ephemeral: true
+    });
+  }
+
+  // VIEW OPEN TICKETS
+  if (interaction.customId === "dash_tickets") {
+    const list = Object.entries(tickets)
+      .map(([id, t]) => `• <#${id}> — <@${t.owner}>`)
+      .join("\n") || "No open tickets.";
+
+    return interaction.reply({
+      ephemeral: true,
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#2563eb")
+          .setTitle("🎟️ Open Tickets")
+          .setDescription(list)
+      ]
+    });
+  }
+
+  // VIEW SSU STATUS
+  if (interaction.customId === "dash_ssu") {
+    const list = Object.entries(polls)
+      .map(([id, p]) => 
+        `• Message ID: \`${id}\`\n` +
+        `  Attend: **${p.attend.length}** | Can’t: **${p.cant.length}**`
+      )
+      .join("\n\n") || "No active SSU votes.";
+
+    return interaction.reply({
+      ephemeral: true,
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#16a34a")
+          .setTitle("🚨 SSU Status")
+          .setDescription(list)
+      ]
+    });
+  }
+
+  // CLOSE DASHBOARD
+  if (interaction.customId === "dash_close") {
+    return interaction.message.delete().catch(() => {});
+  }
+}
 
   // Buttons
   if (interaction.isButton()) {
