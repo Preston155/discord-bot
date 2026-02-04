@@ -47,7 +47,7 @@ const CATEGORIES = {
 };
 
 // =====================
-// DATA STORAGE (JSON)
+// DATA STORAGE
 // =====================
 const DATA_DIR = path.join(__dirname, "data");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
@@ -64,8 +64,7 @@ for (const f of Object.values(FILES)) {
   if (!fs.existsSync(p)) fs.writeFileSync(p, "{}");
 }
 
-const load = (f) =>
-  JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), "utf8"));
+const load = (f) => JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), "utf8"));
 const save = (f, d) =>
   fs.writeFileSync(path.join(DATA_DIR, f), JSON.stringify(d, null, 2));
 
@@ -83,10 +82,8 @@ const isStaff = (m) => m.roles.cache.has(STAFF_ROLE_ID);
 async function resolveTarget(message) {
   if (message.mentions.members.first())
     return message.mentions.members.first();
-
   const id = message.content.split(/\s+/)[1];
   if (!id) return null;
-
   try {
     return await message.guild.members.fetch(id);
   } catch {
@@ -96,16 +93,13 @@ async function resolveTarget(message) {
 
 function createCase(action, target, moderator, reason) {
   cases.lastCase++;
-  const id = cases.lastCase;
-
-  cases[id] = {
+  cases[cases.lastCase] = {
     action,
     target,
     moderator,
     reason,
     time: Date.now()
   };
-
   save(FILES.cases, cases);
 
   const log = client.channels.cache.get(MOD_LOG_CHANNEL_ID);
@@ -114,7 +108,7 @@ function createCase(action, target, moderator, reason) {
       embeds: [
         new EmbedBuilder()
           .setColor("#dc2626")
-          .setTitle(`📁 Case #${id}`)
+          .setTitle(`📁 Case #${cases.lastCase}`)
           .addFields(
             { name: "Action", value: action, inline: true },
             { name: "User", value: `<@${target}>`, inline: true },
@@ -138,30 +132,25 @@ function xpForLevel(lvl) {
   return Math.floor(100 * lvl * 1.5);
 }
 
-function addXP(userId) {
+function addXP(id) {
   const now = Date.now();
-
-  if (!levels[userId]) {
-    levels[userId] = { xp: 0, level: 1, last: 0 };
-  }
-
-  if (now - levels[userId].last < XP_COOLDOWN) return null;
+  if (!levels[id]) levels[id] = { xp: 0, level: 1, last: 0 };
+  if (now - levels[id].last < XP_COOLDOWN) return null;
 
   const gain =
     Math.floor(Math.random() * (XP_MAX - XP_MIN + 1)) + XP_MIN;
-
-  levels[userId].xp += gain;
-  levels[userId].last = now;
+  levels[id].xp += gain;
+  levels[id].last = now;
 
   let leveled = false;
-  while (levels[userId].xp >= xpForLevel(levels[userId].level)) {
-    levels[userId].xp -= xpForLevel(levels[userId].level);
-    levels[userId].level++;
+  while (levels[id].xp >= xpForLevel(levels[id].level)) {
+    levels[id].xp -= xpForLevel(levels[id].level);
+    levels[id].level++;
     leveled = true;
   }
 
   save(FILES.levels, levels);
-  return leveled ? levels[userId].level : null;
+  return leveled ? levels[id].level : null;
 }
 
 // =====================
@@ -177,15 +166,15 @@ client.once("ready", () => {
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
-  const levelUp = addXP(message.author.id);
-  if (levelUp) {
+  const lvlUp = addXP(message.author.id);
+  if (lvlUp) {
     message.channel.send({
       embeds: [
         new EmbedBuilder()
           .setColor("#facc15")
           .setTitle("⬆️ Level Up!")
           .setDescription(
-            `${message.author} reached **Level ${levelUp}**!`
+            `${message.author} reached **Level ${lvlUp}**!`
           )
       ]
     });
@@ -194,6 +183,24 @@ client.on("messageCreate", async (message) => {
   if (!message.content.startsWith(PREFIX)) return;
   const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
   const cmd = args.shift().toLowerCase();
+
+  // =====================
+  // LEVEL CHECK
+  // =====================
+  if (cmd === "level") {
+    const u = message.mentions.users.first() || message.author;
+    const d = levels[u.id] || { level: 1, xp: 0 };
+    return message.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#3b82f6")
+          .setTitle("📈 Level")
+          .setDescription(
+            `User: ${u}\nLevel: **${d.level}**\nXP: **${d.xp}/${xpForLevel(d.level)}**`
+          )
+      ]
+    });
+  }
 
   // =====================
   // SEND TICKET PANEL
@@ -252,54 +259,19 @@ client.on("messageCreate", async (message) => {
       components: [row]
     });
 
-    polls[msg.id] = { attend: [], cant: [] };
+    polls[msg.id] = { attend: [], cant: [], started: false };
     save(FILES.polls, polls);
-  }
-
-  // =====================
-  // SSU / SSD
-  // =====================
-  if (cmd === "ssu" && isStaff(message.member)) {
-    const poll = Object.values(polls).reverse()[0];
-    if (!poll) return message.reply("❌ No SSU poll found.");
-
-    const mentions = poll.attend.map(id => `<@${id}>`).join(" ");
-
-    message.channel.send({
-      content: `<@&${SSU_ROLE_PING}>\n${mentions}`,
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#22c55e")
-          .setTitle("🚨 Server Startup!")
-          .setDescription(
-            `Game Code: **${SERVER_INFO.code}**\nServer Owner: **${SERVER_INFO.owner}**`
-          )
-      ]
-    });
-  }
-
-  if (cmd === "ssd" && isStaff(message.member)) {
-    message.channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#dc2626")
-          .setTitle("🔕 Server Shutdown")
-          .setDescription("The server has shut down temporarily.")
-      ]
-    });
   }
 
   // =====================
   // MODERATION
   // =====================
-  if (["warn", "kick", "ban", "unban"].includes(cmd) && !isStaff(message.member))
-    return;
+  if (["warn","kick","ban","unban"].includes(cmd) && !isStaff(message.member)) return;
 
   if (cmd === "warn") {
     const target = await resolveTarget(message);
-    if (!target) return message.reply("❌ User not found.");
-    const reason = args.join(" ") || "No reason provided";
-    createCase("Warn", target.id, message.author.id, reason);
+    if (!target) return;
+    createCase("Warn", target.id, message.author.id, args.join(" ") || "No reason");
     message.reply(`⚠️ Warned **${target.user.tag}**`);
   }
 
@@ -333,10 +305,7 @@ client.on("messageCreate", async (message) => {
 // =====================
 client.on("interactionCreate", async (interaction) => {
   // Ticket creation
-  if (
-    interaction.isStringSelectMenu() &&
-    interaction.customId === "ticket_category"
-  ) {
+  if (interaction.isStringSelectMenu() && interaction.customId === "ticket_category") {
     const user = interaction.user;
     const key = interaction.values[0];
 
@@ -344,24 +313,9 @@ client.on("interactionCreate", async (interaction) => {
       name: `${user.username}-ticket`,
       parent: CATEGORIES[key],
       permissionOverwrites: [
-        {
-          id: interaction.guild.id,
-          deny: [PermissionsBitField.Flags.ViewChannel]
-        },
-        {
-          id: user.id,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages
-          ]
-        },
-        {
-          id: SUPPORT_ROLE_ID,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages
-          ]
-        }
+        { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+        { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+        { id: SUPPORT_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
       ]
     });
 
@@ -369,18 +323,9 @@ client.on("interactionCreate", async (interaction) => {
     save(FILES.tickets, tickets);
 
     const buttons = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("ticket_claim")
-        .setLabel("Claim")
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId("ticket_unclaim")
-        .setLabel("Unclaim")
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId("ticket_close")
-        .setLabel("Close")
-        .setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId("ticket_claim").setLabel("Claim").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("ticket_unclaim").setLabel("Unclaim").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("ticket_close").setLabel("Close").setStyle(ButtonStyle.Danger)
     );
 
     await channel.send({
@@ -394,46 +339,38 @@ client.on("interactionCreate", async (interaction) => {
       components: [buttons]
     });
 
-    return interaction.reply({
-      content: "✅ Ticket created.",
-      ephemeral: true
-    });
+    return interaction.reply({ content: "✅ Ticket created.", ephemeral: true });
   }
 
-  // Ticket buttons
+  // Ticket buttons (STAFF ONLY)
   if (interaction.isButton() && tickets[interaction.channelId]) {
+    if (!isStaff(interaction.member)) {
+      return interaction.reply({ content: "❌ Staff only.", ephemeral: true });
+    }
+
     const ticket = tickets[interaction.channelId];
 
     if (interaction.customId === "ticket_claim") {
       ticket.claimedBy = interaction.user.id;
       save(FILES.tickets, tickets);
-      return interaction.reply({
-        content: "✅ Ticket claimed.",
-        ephemeral: true
-      });
+      return interaction.reply({ content: "✅ Ticket claimed.", ephemeral: true });
     }
 
     if (interaction.customId === "ticket_unclaim") {
       ticket.claimedBy = null;
       save(FILES.tickets, tickets);
-      return interaction.reply({
-        content: "ℹ️ Ticket unclaimed.",
-        ephemeral: true
-      });
+      return interaction.reply({ content: "ℹ️ Ticket unclaimed.", ephemeral: true });
     }
 
     if (interaction.customId === "ticket_close") {
       delete tickets[interaction.channelId];
       save(FILES.tickets, tickets);
-      await interaction.reply({
-        content: "🔒 Closing ticket...",
-        ephemeral: true
-      });
+      await interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
       setTimeout(() => interaction.channel.delete(), 3000);
     }
   }
 
-  // SSU voting
+  // SSU voting + AUTO START
   if (interaction.isButton() && polls[interaction.message.id]) {
     const poll = polls[interaction.message.id];
     const uid = interaction.user.id;
@@ -445,14 +382,8 @@ client.on("interactionCreate", async (interaction) => {
           new EmbedBuilder()
             .setTitle("👀 Voters")
             .addFields(
-              {
-                name: "Attend",
-                value: poll.attend.map(id => `<@${id}>`).join("\n") || "None"
-              },
-              {
-                name: "Can’t Attend",
-                value: poll.cant.map(id => `<@${id}>`).join("\n") || "None"
-              }
+              { name: "Attend", value: poll.attend.map(i=>`<@${i}>`).join("\n") || "None" },
+              { name: "Can’t Attend", value: poll.cant.map(i=>`<@${i}>`).join("\n") || "None" }
             )
         ]
       });
@@ -468,31 +399,35 @@ client.on("interactionCreate", async (interaction) => {
       if (!poll.cant.includes(uid)) poll.cant.push(uid);
     }
 
+    // AUTO SSU
+    if (poll.attend.length >= 5 && !poll.started) {
+      poll.started = true;
+      interaction.channel.send({
+        content: `<@&${SSU_ROLE_PING}>\n${poll.attend.map(i=>`<@${i}>`).join(" ")}`,
+        embeds: [
+          new EmbedBuilder()
+            .setColor("#22c55e")
+            .setTitle("🚨 Server Startup!")
+            .setDescription(
+              `Game Code: **${SERVER_INFO.code}**\nServer Owner: **${SERVER_INFO.owner}**`
+            )
+        ]
+      });
+    }
+
     save(FILES.polls, polls);
 
     await interaction.message.edit({
       components: [
         new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId("poll_attend")
-            .setLabel(`Attend (${poll.attend.length}/5)`)
-            .setStyle(ButtonStyle.Success),
-          new ButtonBuilder()
-            .setCustomId("poll_cant")
-            .setLabel(`Can’t Attend (${poll.cant.length})`)
-            .setStyle(ButtonStyle.Danger),
-          new ButtonBuilder()
-            .setCustomId("poll_view")
-            .setLabel("👀 View Voters")
-            .setStyle(ButtonStyle.Secondary)
+          new ButtonBuilder().setCustomId("poll_attend").setLabel(`Attend (${poll.attend.length}/5)`).setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId("poll_cant").setLabel(`Can’t Attend (${poll.cant.length})`).setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId("poll_view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
         )
       ]
     });
 
-    return interaction.reply({
-      content: "✅ Vote updated.",
-      ephemeral: true
-    });
+    return interaction.reply({ content: "✅ Vote updated.", ephemeral: true });
   }
 });
 
