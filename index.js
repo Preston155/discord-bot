@@ -350,28 +350,43 @@ if (cmd === "staffdashboard" && isStaff(message.member)) {
       new ButtonBuilder().setCustomId("poll_view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
     );
 
-    const msg = await message.channel.send({ embeds: [embed], components: [row] });
+    const msg = await message.channel.send({
+  content: `@everyone <@&${SSU_ROLE_PING}>`,
+  embeds: [embed],
+  components: [row],
+  allowedMentions: {
+    parse: ["everyone", "roles"]
+  }
+});
     polls[msg.id] = { attend: [], cant: [], started: false };
     save(FILES.polls, polls);
   }
 
   // SSU / SSD
-  if (cmd === "ssu" && isStaff(message.member)) {
-    const poll = Object.values(polls).reverse()[0];
-    if (!poll) return;
+if (cmd === "ssu" && isStaff(message.member)) {
+  const poll = Object.values(polls).reverse().find(p => p.attend.length > 0);
+  if (!poll) return message.reply("❌ No active SSU vote found.");
 
-    message.channel.send({
-      content: `<@&${SSU_ROLE_PING}>\n${poll.attend.map(i=>`<@${i}>`).join(" ")}`,
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#22c55e")
-          .setTitle("🚨 Server Startup!")
-          .setDescription(
-            `Game Code: **${SERVER_INFO.code}**\nServer Owner: **${SERVER_INFO.owner}**`
-          )
-      ]
-    });
-  }
+  const mentions = poll.attend.map(id => `<@${id}>`).join(" ");
+
+  message.channel.send({
+    content: `<@&${SSU_ROLE_PING}>\n${mentions}`,
+    embeds: [
+      new EmbedBuilder()
+        .setColor("#22c55e")
+        .setTitle("🚨 Server Startup!")
+        .setDescription(
+          `Game Code: **${SERVER_INFO.code}**\n` +
+          `Server Owner: **${SERVER_INFO.owner}**`
+ toggle your SSU system
+        )
+    ],
+    allowedMentions: {
+      users: poll.attend,
+      roles: [SSU_ROLE_PING]
+    }
+  });
+}
 
   if (cmd === "ssd" && isStaff(message.member)) {
     message.channel.send({
@@ -669,13 +684,29 @@ if (interaction.isButton() && interaction.customId.startsWith("dash_jump_")) {
           : (poll.attend = poll.attend.filter(i=>i!==uid), poll.cant.push(uid));
       }
 
-      if (poll.attend.length >= 5 && !poll.started) {
-        poll.started = true;
-        interaction.channel.send({
-          content: `<@&${SSU_ROLE_PING}>\n${poll.attend.map(i=>`<@${i}>`).join(" ")}`,
-          embeds: [new EmbedBuilder().setColor("#22c55e").setTitle("🚨 Server Startup!").setDescription(`Game Code: **${SERVER_INFO.code}**`)]
-        });
-      }
+if (poll.attend.length >= 5 && !poll.started) {
+  poll.started = true;
+
+  const mentions = poll.attend.map(id => `<@${id}>`).join(" ");
+
+  interaction.channel.send({
+    content: `<@&${SSU_ROLE_PING}>\n${mentions}`,
+    embeds: [
+      new EmbedBuilder()
+        .setColor("#22c55e")
+        .setTitle("🚨 Server Startup!")
+        .setDescription(
+          `**The SSU threshold has been met.**\n\n` +
+          `Game Code: **${SERVER_INFO.code}**\n` +
+          `Server Owner: **${SERVER_INFO.owner}**`
+        )
+    ],
+    allowedMentions: {
+      users: poll.attend,
+      roles: [SSU_ROLE_PING]
+    }
+  });
+}
 
       save(FILES.polls, polls);
 
