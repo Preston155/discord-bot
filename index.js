@@ -687,23 +687,24 @@ if (interaction.isButton() && interaction.customId.startsWith("dash_jump_")) {
 if (poll.attend.length >= 5 && !poll.started) {
   poll.started = true;
 
-  const mentions = poll.attend.map(id => `<@${id}>`).join(" ");
+  const attendeeMentions = poll.attend.map(id => `<@${id}>`).join(" ");
 
   interaction.channel.send({
-    content: `<@&${SSU_ROLE_PING}>\n${mentions}`,
+    content: `<@&${SSU_ROLE_PING}>\n${attendeeMentions}`,
     embeds: [
       new EmbedBuilder()
         .setColor("#22c55e")
         .setTitle("🚨 Server Startup!")
         .setDescription(
-          `**The SSU threshold has been met.**\n\n` +
+          "**The SSU vote has passed and the server is starting.**\n\n" +
           `Game Code: **${SERVER_INFO.code}**\n` +
           `Server Owner: **${SERVER_INFO.owner}**`
         )
+        .setTimestamp()
     ],
     allowedMentions: {
-      users: poll.attend,
-      roles: [SSU_ROLE_PING]
+      roles: [SSU_ROLE_PING],
+      users: poll.attend
     }
   });
 }
@@ -744,3 +745,4 @@ process.on("exit", gracefulShutdown);
 // LOGIN
 // =====================
 client.login(process.env.TOKEN);
+
