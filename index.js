@@ -378,8 +378,8 @@ if (cmd === "ssu" && isStaff(message.member)) {
         .setDescription(
           `Game Code: **${SERVER_INFO.code}**\n` +
           `Server Owner: **${SERVER_INFO.owner}**`
- toggle your SSU system
         )
+        .setTimestamp()
     ],
     allowedMentions: {
       users: poll.attend,
