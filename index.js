@@ -30,6 +30,7 @@ const client = new Client({
 // CONFIG
 // =====================
 const PREFIX = "!";
+const STAFF_ROLE_ID = "1278100769626783837";
 const SUPPORT_ROLE_ID = "1282417060391161978";
 const SSU_ROLE_PING = "1468213717035384882";
 const MOD_LOG_CHANNEL_ID = "1461008751749234740";
@@ -78,10 +79,17 @@ if (!cases.lastCase) cases.lastCase = 0;
 // =====================
 // HELPERS
 // =====================
-async function resolveMember(message, index = 0) {
-  if (message.mentions.members.first()) return message.mentions.members.first();
-  const id = message.content.split(/\s+/)[index + 1];
+function isStaff(member) {
+  return member.roles.cache.has(STAFF_ROLE_ID);
+}
+
+async function resolveTarget(message, argIndex = 0) {
+  const mention = message.mentions.members.first();
+  if (mention) return mention;
+
+  const id = message.content.split(/\s+/)[argIndex + 1];
   if (!id) return null;
+
   try {
     return await message.guild.members.fetch(id);
   } catch {
@@ -180,16 +188,13 @@ client.on("messageCreate", async (message) => {
   // SEND TICKET PANEL
   // =====================
   if (cmd === "sendpanel") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+    if (!isStaff(message.member)) return;
 
     const embed = new EmbedBuilder()
       .setColor("#2563eb")
       .setTitle("🎟️ Support Tickets — Lake County Roleplay")
       .setDescription(
-        "**Select a department below**\n\n" +
-        "• One issue per ticket\n" +
-        "• Do not ping staff\n" +
-        "• Be respectful"
+        "**Select a department below**\n\n• One issue per ticket\n• Do not ping staff\n• Be respectful"
       );
 
     const menu = new StringSelectMenuBuilder()
@@ -202,7 +207,7 @@ client.on("messageCreate", async (message) => {
         { label: "Management", value: "management_support", emoji: "👑" }
       );
 
-    return message.channel.send({
+    message.channel.send({
       embeds: [embed],
       components: [new ActionRowBuilder().addComponents(menu)]
     });
@@ -212,7 +217,7 @@ client.on("messageCreate", async (message) => {
   // SSU VOTE
   // =====================
   if (cmd === "ssuvote") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+    if (!isStaff(message.member)) return;
 
     const embed = new EmbedBuilder()
       .setColor("#16a34a")
@@ -235,7 +240,7 @@ client.on("messageCreate", async (message) => {
   // SSU / SSD
   // =====================
   if (cmd === "ssu") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+    if (!isStaff(message.member)) return;
 
     const poll = Object.values(polls).reverse().find(p => p.attend.length);
     if (!poll) return message.reply("❌ No SSU poll found.");
@@ -249,16 +254,14 @@ client.on("messageCreate", async (message) => {
           .setColor("#22c55e")
           .setTitle("🚨 Server Startup!")
           .setDescription(
-            `**Server Information**\n` +
-            `Game Code: **${SERVER_INFO.code}**\n` +
-            `Server Owner: **${SERVER_INFO.owner}**`
+            `Game Code: **${SERVER_INFO.code}**\nServer Owner: **${SERVER_INFO.owner}**`
           )
       ]
     });
   }
 
   if (cmd === "ssd") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+    if (!isStaff(message.member)) return;
     message.channel.send({
       embeds: [
         new EmbedBuilder()
@@ -270,66 +273,69 @@ client.on("messageCreate", async (message) => {
   }
 
   // =====================
-  // LEVEL CHECK
+  // LEVEL
   // =====================
   if (cmd === "level") {
     const u = message.mentions.users.first() || message.author;
     const d = levels[u.id] || { level: 1, xp: 0 };
-    return message.reply({
+    message.reply({
       embeds: [
         new EmbedBuilder()
           .setColor("#3b82f6")
           .setTitle("📈 Level")
           .setDescription(
-            `User: ${u}\n` +
-            `Level: **${d.level}**\n` +
-            `XP: **${d.xp}/${xpForLevel(d.level)}**`
+            `User: ${u}\nLevel: **${d.level}**\nXP: **${d.xp}/${xpForLevel(d.level)}**`
           )
       ]
     });
   }
 
   // =====================
-  // MODERATION COMMANDS
+  // MODERATION (STAFF ROLE)
   // =====================
-  if (cmd === "warn") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) return;
-    const target = await resolveMember(message);
-    if (!target) return message.reply("❌ Provide a user mention or ID.");
-    const reason = args.join(" ") || "No reason provided";
+  if (["warn", "kick", "ban", "unban"].includes(cmd)) {
+    if (!isStaff(message.member)) return;
+  }
 
+  if (cmd === "warn") {
+    const target = await resolveTarget(message);
+    if (!target) return message.reply("❌ User not found.");
+
+    const reason = args.join(" ") || "No reason provided";
     if (!moderation[target.id]) moderation[target.id] = [];
+
     moderation[target.id].push({ reason, mod: message.author.id, time: Date.now() });
     save(FILES.moderation, moderation);
 
     const id = createCase("Warn", target.id, message.author.id, reason);
-    message.reply(`⚠️ Warned. Case #${id}`);
+    message.reply(`⚠️ Warned **${target.user.tag}** (Case #${id})`);
   }
 
   if (cmd === "kick") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.KickMembers)) return;
-    const target = await resolveMember(message);
-    if (!target) return;
+    const target = await resolveTarget(message);
+    if (!target || !target.kickable) return message.reply("❌ Cannot kick user.");
+
     await target.kick();
     const id = createCase("Kick", target.id, message.author.id, "Kicked");
-    message.reply(`👢 Kicked. Case #${id}`);
+    message.reply(`👢 Kicked **${target.user.tag}** (Case #${id})`);
   }
 
   if (cmd === "ban") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.BanMembers)) return;
-    const target = await resolveMember(message);
-    if (!target) return;
+    const target = await resolveTarget(message);
+    if (!target || !target.bannable) return message.reply("❌ Cannot ban user.");
+
     await target.ban();
     const id = createCase("Ban", target.id, message.author.id, "Banned");
-    message.reply(`🔨 Banned. Case #${id}`);
+    message.reply(`🔨 Banned **${target.user.tag}** (Case #${id})`);
   }
 
   if (cmd === "unban") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.BanMembers)) return;
     const uid = args[0];
+    if (!uid) return message.reply("❌ Provide a user ID.");
+
     await message.guild.members.unban(uid);
     const id = createCase("Unban", uid, message.author.id, "Unbanned");
-    message.reply(`✅ Unbanned. Case #${id}`);
+    message.reply(`✅ Unbanned <@${uid}> (Case #${id})`);
   }
 });
 
@@ -340,11 +346,11 @@ client.on("interactionCreate", async (interaction) => {
   // Ticket creation
   if (interaction.isStringSelectMenu() && interaction.customId === "ticket_category") {
     const user = interaction.user;
-    const categoryKey = interaction.values[0];
+    const key = interaction.values[0];
 
     const channel = await interaction.guild.channels.create({
-      name: `${user.username}-${Object.keys(tickets).length + 1}`,
-      parent: CATEGORIES[categoryKey],
+      name: `${user.username}-ticket`,
+      parent: CATEGORIES[key],
       permissionOverwrites: [
         { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
         { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
@@ -442,7 +448,7 @@ client.on("interactionCreate", async (interaction) => {
       ]
     });
 
-    return interaction.reply({ content: "✅ Vote updated.", ephemeral: true });
+    interaction.reply({ content: "✅ Vote updated.", ephemeral: true });
   }
 });
 
