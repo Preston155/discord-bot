@@ -38,7 +38,7 @@ const MOD_LOG_CHANNEL_ID = "1461008751749234740";
 const LEVEL_UP_CHANNEL_ID = "1467677377319534662";
 
 const WELCOME_CHANNEL_ID = "1461003360999047300";
-const VERIFY_ROLE_ID = "1271940172237242461"; // role they get after verifying
+const VERIFY_ROLE_ID = "PUT_VERIFY_ROLE_ID_HERE"; // role they get after verifying
 
 const SERVER_INFO = { code: "ILCRPC", owner: "MiningMavenYT" };
 const SESSION_BANNER_URL =
@@ -190,22 +190,12 @@ client.on("guildMemberAdd", async (member) => {
   const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
   if (!channel) return;
 
-  const embed = new EmbedBuilder()
-    .setColor("#2563eb")
-    .setTitle("👋 Welcome to Lake County Roleplay!")
-    .setDescription(
-      `Welcome ${member} to **Lake County Roleplay**!\n\n` +
-      `You are our **${member.guild.memberCount}th member** — we hope you enjoy your stay!\n\n` +
-      "🔹 **Next Steps**\n" +
-      "• Please verify to gain access to all channels\n" +
-      "• Make sure DMs are open for staff support\n" +
-      "• Review the server rules before participating\n\n" +
-      "_Failure to verify may result in limited access._"
-    )
-    .setFooter({
-      text: "Lake County Roleplay • Welcome System"
-    })
-    .setTimestamp();
+  const memberCount = member.guild.memberCount;
+
+  const messageText =
+    `👋 **Welcome ${member} to Lake County Roleplay!** ` +
+    `You are our **${memberCount}th member**, we hope you enjoy your stay!\n\n` +
+    `Ensure to verify to gain access to all of our channels and stop in-game Private Messages.`;
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -216,8 +206,7 @@ client.on("guildMemberAdd", async (member) => {
   );
 
   channel.send({
-    content: `${member}`,
-    embeds: [embed],
+    content: messageText,
     components: [row]
   });
 });
@@ -493,15 +482,14 @@ if (interaction.isButton() && interaction.customId === "verify_member") {
 
   try {
     await member.roles.add(VERIFY_ROLE_ID);
-
-    await interaction.reply({
+    return interaction.reply({
       content: "🎉 You have been verified! Welcome to Lake County Roleplay.",
       ephemeral: true
     });
   } catch (err) {
     console.error(err);
     return interaction.reply({
-      content: "❌ Failed to verify. Please contact staff.",
+      content: "❌ Verification failed. Please contact staff.",
       ephemeral: true
     });
   }
