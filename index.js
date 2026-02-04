@@ -191,7 +191,7 @@ client.on("guildMemberAdd", async (member) => {
   if (!channel) return;
 
   const message =
-    `:wavinghand: \`\` - \`\` Welcome ${member} to **Lake County Roleplay!** ` +
+    `👋🏽 \`\` - \`\` Welcome ${member} to **Lake County Roleplay!** ` +
     `You are our **${member.guild.memberCount}** member, we hope you enjoy your stay!\n` +
     `-# Ensure to verify to gain access to all of our channels and stop in-game Private Messages.`;
 
