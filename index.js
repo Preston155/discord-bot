@@ -38,21 +38,63 @@ const CATEGORIES = {
 };
 
 // =====================
+// LEVEL SYSTEM CONFIG
+// =====================
+const LEVEL_XP_COOLDOWN = 60 * 1000; // 1 minute
+const XP_MIN = 10;
+const XP_MAX = 20;
+
+// =====================
 // DATA FILE SETUP
 // =====================
 const DATA_DIR = path.join(__dirname, "data");
 const POLLS_FILE = path.join(DATA_DIR, "polls.json");
 const TICKETS_FILE = path.join(DATA_DIR, "tickets.json");
+const LEVELS_FILE = path.join(DATA_DIR, "levels.json");
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 if (!fs.existsSync(POLLS_FILE)) fs.writeFileSync(POLLS_FILE, "{}");
 if (!fs.existsSync(TICKETS_FILE)) fs.writeFileSync(TICKETS_FILE, "{}");
+if (!fs.existsSync(LEVELS_FILE)) fs.writeFileSync(LEVELS_FILE, "{}");
 
 const loadJSON = (file) => JSON.parse(fs.readFileSync(file, "utf8"));
 const saveJSON = (file, data) => fs.writeFileSync(file, JSON.stringify(data, null, 2));
 
 let polls = loadJSON(POLLS_FILE);
 let tickets = loadJSON(TICKETS_FILE);
+let levels = loadJSON(LEVELS_FILE);
+
+// =====================
+// LEVEL FUNCTIONS
+// =====================
+function getXpForLevel(level) {
+  return Math.floor(100 * level * 1.5);
+}
+
+function addXp(userId) {
+  const now = Date.now();
+
+  if (!levels[userId]) {
+    levels[userId] = { xp: 0, level: 1, lastXp: 0 };
+  }
+
+  if (now - levels[userId].lastXp < LEVEL_XP_COOLDOWN) return null;
+
+  const xpGain = Math.floor(Math.random() * (XP_MAX - XP_MIN + 1)) + XP_MIN;
+  levels[userId].xp += xpGain;
+  levels[userId].lastXp = now;
+
+  let leveledUp = false;
+
+  while (levels[userId].xp >= getXpForLevel(levels[userId].level)) {
+    levels[userId].xp -= getXpForLevel(levels[userId].level);
+    levels[userId].level++;
+    leveledUp = true;
+  }
+
+  saveJSON(LEVELS_FILE, levels);
+  return leveledUp ? levels[userId].level : null;
+}
 
 // =====================
 // READY
@@ -62,7 +104,7 @@ client.once("ready", () => {
 });
 
 // =====================
-// TICKET PANEL
+// BUILD TICKET PANEL
 // =====================
 function buildPanel() {
   const embed = new EmbedBuilder()
@@ -70,7 +112,7 @@ function buildPanel() {
     .setTitle("🏛️ Lake County Roleplay | Assistance Center")
     .setDescription(
       "**Official Support System**\n\n" +
-      "Use the dropdown below to contact staff.\n\n" +
+      "Select a category below to contact staff.\n\n" +
       "**Rules:**\n" +
       "• One issue per ticket\n" +
       "• Be respectful\n" +
@@ -99,48 +141,38 @@ function buildPanel() {
 }
 
 // =====================
-// MESSAGE COMMANDS
+// MESSAGE CREATE
 // =====================
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
+
+  // =====================
+  // LEVEL XP GAIN
+  // =====================
+  const newLevel = addXp(message.author.id);
+  if (newLevel) {
+    message.channel.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#f1c40f")
+          .setTitle("⬆️ Level Up!")
+          .setDescription(
+            `🎉 **${message.author} leveled up!**\n\n` +
+            `**New Level:** ${newLevel}\n` +
+            "Keep chatting to earn more XP!"
+          )
+          .setFooter({ text: "Lake County Roleplay • Level System" })
+      ]
+    });
+  }
+
   if (!message.content.startsWith(PREFIX)) return;
 
+  // SEND TICKET PANEL
   if (message.content === "!sendpanel") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
     await message.delete().catch(() => {});
     await message.channel.send(buildPanel());
-  }
-
-  if (message.content === "!ssuvote") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
-
-    const embed = new EmbedBuilder()
-      .setColor("#2ecc71")
-      .setTitle("📊 Session Attendance Poll")
-      .setDescription(
-        "**Server Startup (SSU) Interest Check**\n\n" +
-        "Click below to indicate availability.\n\n" +
-        "**Auto-starts at 5 Attend votes.**"
-      )
-      .setImage(SESSION_BANNER_URL);
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("attend").setLabel("✅ Attend (0/5)").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("cant").setLabel("❌ Can’t Attend (0)").setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId("view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
-    );
-
-    const msg = await message.channel.send({ embeds: [embed], components: [row] });
-
-    polls[msg.id] = {
-      channelId: msg.channel.id,
-      attend: [],
-      cant: [],
-      started: false
-    };
-
-    saveJSON(POLLS_FILE, polls);
-    await message.delete().catch(() => {});
   }
 });
 
@@ -161,7 +193,6 @@ client.on("interactionCreate", async (interaction) => {
 
       const clean = user.username.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12);
       const num = Math.floor(1000 + Math.random() * 9000);
-
       const role = await guild.roles.fetch(SUPPORT_ROLE_ID);
 
       const channel = await guild.channels.create({
@@ -174,11 +205,7 @@ client.on("interactionCreate", async (interaction) => {
         ]
       });
 
-      tickets[channel.id] = {
-        owner: user.id,
-        claimed: null,
-        status: "open"
-      };
+      tickets[channel.id] = { owner: user.id, claimed: null, status: "open" };
       saveJSON(TICKETS_FILE, tickets);
 
       const embed = new EmbedBuilder()
@@ -186,7 +213,7 @@ client.on("interactionCreate", async (interaction) => {
         .setTitle("🎟️ Support Ticket Opened")
         .setDescription(
           `**User:** <@${user.id}>\n` +
-          `**Status:** 🟡 Open\n` +
+          "**Status:** 🟡 Open\n" +
           "**Claimed By:** ❌ Unclaimed"
         );
 
@@ -203,7 +230,7 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     // =====================
-    // TICKET BUTTONS (PERSISTENT)
+    // TICKET BUTTONS
     // =====================
     if (interaction.isButton() && ["claim", "unclaim", "close"].includes(interaction.customId)) {
       const ticket = tickets[interaction.channel.id];
@@ -249,61 +276,6 @@ client.on("interactionCreate", async (interaction) => {
 
       await interaction.message.edit({ embeds: [embed] });
       return interaction.reply({ content: "✅ Ticket updated.", ephemeral: true });
-    }
-
-    // =====================
-    // SESSION POLL BUTTONS (PERSISTENT)
-    // =====================
-    if (interaction.isButton() && polls[interaction.message.id]) {
-      const poll = polls[interaction.message.id];
-      const uid = interaction.user.id;
-
-      if (interaction.customId === "view") {
-        return interaction.reply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("👀 Session Poll Voters")
-              .addFields(
-                { name: "Attend", value: poll.attend.map(id => `<@${id}>`).join("\n") || "None" },
-                { name: "Can't Attend", value: poll.cant.map(id => `<@${id}>`).join("\n") || "None" }
-              )
-          ],
-          ephemeral: true
-        });
-      }
-
-      if (poll.started) return interaction.reply({ content: "Voting closed.", ephemeral: true });
-
-      if (interaction.customId === "attend") {
-        poll.attend.includes(uid)
-          ? poll.attend = poll.attend.filter(id => id !== uid)
-          : (poll.cant = poll.cant.filter(id => id !== uid), poll.attend.push(uid));
-      }
-
-      if (interaction.customId === "cant") {
-        poll.cant.includes(uid)
-          ? poll.cant = poll.cant.filter(id => id !== uid)
-          : (poll.attend = poll.attend.filter(id => id !== uid), poll.cant.push(uid));
-      }
-
-      if (poll.attend.length >= 5 && !poll.started) {
-        poll.started = true;
-        await interaction.channel.send({
-          content: SSU_PING_ROLE_ID ? `<@&${SSU_PING_ROLE_ID}>` : "@everyone",
-          embeds: [new EmbedBuilder().setTitle("🚨 SERVER STARTUP (SSU)").setImage(SESSION_BANNER_URL)]
-        });
-      }
-
-      saveJSON(POLLS_FILE, polls);
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("attend").setLabel(`Attend (${poll.attend.length}/5)`).setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("cant").setLabel(`Can't Attend (${poll.cant.length})`).setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId("view").setLabel("View Voters").setStyle(ButtonStyle.Secondary)
-      );
-
-      await interaction.message.edit({ components: [row] });
-      return interaction.reply({ content: "Vote updated.", ephemeral: true });
     }
 
   } catch (err) {
