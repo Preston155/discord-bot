@@ -202,25 +202,16 @@ client.on("messageCreate", async (message) => {
 
   // SEND PANEL
   if (cmd === "sendpanel" && isStaff(message.member)) {
-const embed = new EmbedBuilder()
-  .setColor("#2563eb")
-  .setTitle("🎟️ Lake County Roleplay — Support Center")
-  .setDescription(
-    "**Welcome to the Lake County Roleplay Support Center.**\n\n" +
-
-    "To ensure your request is handled as efficiently as possible, please select the **appropriate department** from the menu below.\n\n" +
-
-    "📌 **Ticket Guidelines**\n" +
-    "• Open **one ticket per issue**\n" +
-    "• Provide **clear and detailed information**\n" +
-    "• Remain **respectful and patient** while waiting for a response\n" +
-    "• **Do not ping staff** — your ticket will be handled in order\n\n" +
-
-    "⚠️ **Misuse of the ticket system may result in moderation action.**"
-  )
-  .setFooter({
-    text: "Lake County Roleplay • Support & Staff Services"
-  });
+    const embed = new EmbedBuilder()
+      .setColor("#2563eb")
+      .setTitle("🎟️ Lake County Roleplay — Support Center")
+      .setDescription(
+        "**Welcome to the Support Center.**\n\n" +
+        "Select the appropriate department below.\n\n" +
+        "• One ticket per issue\n" +
+        "• Do not ping staff\n" +
+        "• Be respectful"
+      );
 
     const menu = new StringSelectMenuBuilder()
       .setCustomId("ticket_category")
@@ -232,7 +223,7 @@ const embed = new EmbedBuilder()
         { label: "Management", value: "management_support", emoji: "👑" }
       );
 
-    return message.channel.send({
+    message.channel.send({
       embeds: [embed],
       components: [new ActionRowBuilder().addComponents(menu)]
     });
@@ -244,25 +235,12 @@ const embed = new EmbedBuilder()
       .setColor("#16a34a")
       .setTitle("🚨 Server Startup Vote")
       .setDescription(
-        "**A Server Startup (SSU) is being proposed.**\n\n" +
-
-    "Please review the information below **before voting**:\n\n" +
-
-    "🟢 **Attend** — You are able and willing to participate in this session\n" +
-    "🔴 **Can’t Attend** — You are unavailable for this session\n\n" +
-
-    "📋 **Voting Guidelines**\n" +
-    "• Only vote **Attend** if you fully intend to join\n" +
-    "• You may change or remove your vote at any time\n" +
-    "• Do **not** vote as a joke or to inflate numbers\n\n" +
-
-    "⚙️ **Session Rules**\n" +
-    "• The server will **automatically start once 5 players vote Attend**\n" +
-    "• Staff may manually start or cancel the session if needed\n\n" +
-
-    "Thank you for helping us keep sessions organized and professional."
+        "**A Server Startup is being proposed.**\n\n" +
+        "🟢 Attend — You are available\n" +
+        "🔴 Can’t Attend — You are unavailable\n\n" +
+        "• You may change or remove your vote\n" +
+        "• Auto-starts at **5 attending**"
       )
-      .setFooter({ text: "Lake County Roleplay • Session Management" })
       .setImage(SESSION_BANNER_URL);
 
     const row = new ActionRowBuilder().addComponents(
@@ -341,9 +319,11 @@ const embed = new EmbedBuilder()
 });
 
 // =====================
-// INTERACTIONS
+// INTERACTIONS (RESTART-PROOF)
 // =====================
 client.on("interactionCreate", async (interaction) => {
+  if (!interaction.guild) return;
+
   // Ticket creation
   if (interaction.isStringSelectMenu() && interaction.customId === "ticket_category") {
     const user = interaction.user;
@@ -368,183 +348,111 @@ client.on("interactionCreate", async (interaction) => {
       new ButtonBuilder().setCustomId("ticket_close").setLabel("Close").setStyle(ButtonStyle.Danger)
     );
 
-    await channel.send({
+    channel.send({
       content: `<@${user.id}> <@&${SUPPORT_ROLE_ID}>`,
-embeds: [
-  new EmbedBuilder()
-    .setColor("#22c55e")
-    .setTitle("🎫 Support Ticket Opened")
-    .setDescription(
-      "**Your ticket has been successfully created.**\n\n" +
-
-      "A member of our staff team will be with you shortly. To help us assist you as efficiently as possible, please provide the following information:\n\n" +
-
-      "📋 **What to Include**\n" +
-      "• A **clear and detailed description** of your issue\n" +
-      "• Any **relevant usernames, user IDs, or role names**\n" +
-      "• Screenshots, clips, or evidence if applicable\n\n" +
-
-      "⏳ **Important Notes**\n" +
-      "• Please remain **patient and respectful** while waiting\n" +
-      "• Do **not** ping staff — your ticket is already in the queue\n" +
-      "• Opening multiple tickets for the same issue may result in action\n\n" +
-
-      "Thank you for your cooperation."
-    )
-    .setFooter({
-      text: "Lake County Roleplay • Support Ticket System"
-    })
-    .setImage(SESSION_BANNER_URL)
-],
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#22c55e")
+          .setTitle("🎫 Support Ticket Opened")
+          .setDescription("Please describe your issue in detail.")
+          .setImage(SESSION_BANNER_URL)
+      ],
       components: [buttons]
     });
 
     return interaction.reply({ content: "✅ Ticket created.", ephemeral: true });
   }
 
-  // Ticket buttons (STAFF ONLY)
-if (interaction.isButton() && tickets[interaction.channelId]) {
-  if (!isStaff(interaction.member)) {
-    return interaction.reply({ content: "❌ Staff only.", ephemeral: true });
-  }
-
-  const ticket = tickets[interaction.channelId];
-
-  // CLAIM
-  if (interaction.customId === "ticket_claim") {
-    ticket.claimedBy = interaction.user.id;
-    save(FILES.tickets, tickets);
-
-    await interaction.channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#3b82f6")
-          .setTitle("📌 Ticket Claimed")
-          .setDescription(
-            `This ticket has been claimed by ${interaction.user}.\n\n` +
-            "They will be assisting with this request."
-          )
-          .setFooter({
-            text: "Lake County Roleplay • Ticket System"
-          })
-      ]
-    });
-
-    return interaction.reply({ content: "✅ Ticket claimed.", ephemeral: true });
-  }
-
-  // UNCLAIM
-  if (interaction.customId === "ticket_unclaim") {
-    ticket.claimedBy = null;
-    save(FILES.tickets, tickets);
-
-    await interaction.channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#f59e0b")
-          .setTitle("📍 Ticket Unclaimed")
-          .setDescription(
-            "This ticket is no longer claimed and is now available for staff."
-          )
-          .setFooter({
-            text: "Lake County Roleplay • Ticket System"
-          })
-      ]
-    });
-
-    return interaction.reply({ content: "ℹ️ Ticket unclaimed.", ephemeral: true });
-  }
-
-  // CLOSE
-  if (interaction.customId === "ticket_close") {
-    delete tickets[interaction.channelId];
-    save(FILES.tickets, tickets);
-
-    await interaction.channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#dc2626")
-          .setTitle("🔒 Ticket Closing")
-          .setDescription(
-            `This ticket has been closed by ${interaction.user}.\n\n` +
-            "The channel will be deleted shortly."
-          )
-          .setFooter({
-            text: "Lake County Roleplay • Ticket System"
-          })
-      ]
-    });
-
-    await interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
-    return setTimeout(() => interaction.channel.delete(), 3000);
-  }
-}
-
-  // SSU voting (TOGGLE + AUTO)
-  if (interaction.isButton() && polls[interaction.message.id]) {
+  // Buttons
+  if (interaction.isButton()) {
+    const ticket = tickets[interaction.channelId];
     const poll = polls[interaction.message.id];
-    const uid = interaction.user.id;
 
-    if (interaction.customId === "poll_view") {
-      return interaction.reply({
-        ephemeral: true,
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("👀 Voters")
-            .addFields(
-              { name: "Attend", value: poll.attend.map(i=>`<@${i}>`).join("\n") || "None" },
-              { name: "Can’t Attend", value: poll.cant.map(i=>`<@${i}>`).join("\n") || "None" }
-            )
-        ]
-      });
-    }
+    // Ticket buttons
+    if (interaction.customId.startsWith("ticket_")) {
+      if (!ticket)
+        return interaction.reply({ content: "⚠️ Ticket inactive.", ephemeral: true });
+      if (!isStaff(interaction.member))
+        return interaction.reply({ content: "❌ Staff only.", ephemeral: true });
 
-    if (interaction.customId === "poll_attend") {
-      if (poll.attend.includes(uid)) {
-        poll.attend = poll.attend.filter(i => i !== uid);
-      } else {
-        poll.cant = poll.cant.filter(i => i !== uid);
-        poll.attend.push(uid);
+      if (interaction.customId === "ticket_claim") {
+        ticket.claimedBy = interaction.user.id;
+        save(FILES.tickets, tickets);
+        interaction.channel.send({ embeds: [new EmbedBuilder().setColor("#3b82f6").setTitle("📌 Ticket Claimed").setDescription(`Claimed by ${interaction.user}`)] });
+        return interaction.reply({ content: "✅ Ticket claimed.", ephemeral: true });
+      }
+
+      if (interaction.customId === "ticket_unclaim") {
+        ticket.claimedBy = null;
+        save(FILES.tickets, tickets);
+        interaction.channel.send({ embeds: [new EmbedBuilder().setColor("#f59e0b").setTitle("📍 Ticket Unclaimed").setDescription("This ticket is now unclaimed.")] });
+        return interaction.reply({ content: "ℹ️ Ticket unclaimed.", ephemeral: true });
+      }
+
+      if (interaction.customId === "ticket_close") {
+        delete tickets[interaction.channelId];
+        save(FILES.tickets, tickets);
+        interaction.channel.send({ embeds: [new EmbedBuilder().setColor("#dc2626").setTitle("🔒 Ticket Closing").setDescription("This ticket will be deleted shortly.")] });
+        await interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
+        return setTimeout(() => interaction.channel.delete(), 3000);
       }
     }
 
-    if (interaction.customId === "poll_cant") {
-      if (poll.cant.includes(uid)) {
-        poll.cant = poll.cant.filter(i => i !== uid);
-      } else {
-        poll.attend = poll.attend.filter(i => i !== uid);
-        poll.cant.push(uid);
-      }
-    }
+    // SSU buttons
+    if (interaction.customId.startsWith("poll_")) {
+      if (!poll)
+        return interaction.reply({ content: "⚠️ Vote inactive.", ephemeral: true });
 
-    if (poll.attend.length >= 5 && !poll.started) {
-      poll.started = true;
-      interaction.channel.send({
-        content: `<@&${SSU_ROLE_PING}>\n${poll.attend.map(i=>`<@${i}>`).join(" ")}`,
-        embeds: [
-          new EmbedBuilder()
-            .setColor("#22c55e")
-            .setTitle("🚨 Server Startup!")
-            .setDescription(
-              `Game Code: **${SERVER_INFO.code}**\nServer Owner: **${SERVER_INFO.owner}**`
-            )
+      const uid = interaction.user.id;
+
+      if (interaction.customId === "poll_view") {
+        return interaction.reply({
+          ephemeral: true,
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("👀 Voters")
+              .addFields(
+                { name: "Attend", value: poll.attend.map(i=>`<@${i}>`).join("\n") || "None" },
+                { name: "Can’t Attend", value: poll.cant.map(i=>`<@${i}>`).join("\n") || "None" }
+              )
+          ]
+        });
+      }
+
+      if (interaction.customId === "poll_attend") {
+        poll.attend.includes(uid)
+          ? poll.attend = poll.attend.filter(i=>i!==uid)
+          : (poll.cant = poll.cant.filter(i=>i!==uid), poll.attend.push(uid));
+      }
+
+      if (interaction.customId === "poll_cant") {
+        poll.cant.includes(uid)
+          ? poll.cant = poll.cant.filter(i=>i!==uid)
+          : (poll.attend = poll.attend.filter(i=>i!==uid), poll.cant.push(uid));
+      }
+
+      if (poll.attend.length >= 5 && !poll.started) {
+        poll.started = true;
+        interaction.channel.send({
+          content: `<@&${SSU_ROLE_PING}>\n${poll.attend.map(i=>`<@${i}>`).join(" ")}`,
+          embeds: [new EmbedBuilder().setColor("#22c55e").setTitle("🚨 Server Startup!").setDescription(`Game Code: **${SERVER_INFO.code}**`)]
+        });
+      }
+
+      save(FILES.polls, polls);
+
+      await interaction.message.edit({
+        components: [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId("poll_attend").setLabel(`Attend (${poll.attend.length}/5)`).setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId("poll_cant").setLabel(`Can’t Attend (${poll.cant.length})`).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId("poll_view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
+          )
         ]
       });
+
+      return interaction.reply({ content: "✅ Vote updated.", ephemeral: true });
     }
-
-    save(FILES.polls, polls);
-
-    await interaction.message.edit({
-      components: [
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId("poll_attend").setLabel(`Attend (${poll.attend.length}/5)`).setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId("poll_cant").setLabel(`Can’t Attend (${poll.cant.length})`).setStyle(ButtonStyle.Danger),
-          new ButtonBuilder().setCustomId("poll_view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
-        )
-      ]
-    });
-
-    return interaction.reply({ content: "✅ Vote updated.", ephemeral: true });
   }
 });
 
