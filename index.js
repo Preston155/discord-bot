@@ -25,10 +25,16 @@ const client = new Client({
 ===================== */
 const PREFIX = "!";
 const SUPPORT_ROLE_ID = "1282417060391161978";
-const SSU_PING_ROLE_ID = null; // null = @everyone
+const SSU_ROLE_PING = "PUT_ROLE_ID_HERE"; // role pinged on SSU
+const SSU_PING_EVERYONE = true;
 
 const SESSION_BANNER_URL =
   "https://media.discordapp.net/attachments/1452829338545160285/1466919030127591613/ILLEGAL_FIREARM_1.png";
+
+const SERVER_INFO = {
+  code: "ILCRPC",
+  owner: "MiningMavenYT"
+};
 
 const CATEGORIES = {
   general_support: "1468276842942435338",
@@ -55,8 +61,8 @@ const FILES = {
 };
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
-for (const file of Object.values(FILES)) {
-  if (!fs.existsSync(file)) fs.writeFileSync(file, "{}");
+for (const f of Object.values(FILES)) {
+  if (!fs.existsSync(f)) fs.writeFileSync(f, "{}");
 }
 
 const load = (f) => JSON.parse(fs.readFileSync(f, "utf8"));
@@ -106,19 +112,15 @@ client.once("ready", () => {
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
-  /* ---- XP SYSTEM ---- */
-  const newLevel = addXp(message.author.id);
-  if (newLevel) {
+  /* ---- XP ---- */
+  const lvl = addXp(message.author.id);
+  if (lvl) {
     message.channel.send({
       embeds: [
         new EmbedBuilder()
           .setColor("#f1c40f")
           .setTitle("⬆️ Level Up!")
-          .setDescription(
-            `🎉 ${message.author} leveled up!\n\n` +
-            `**New Level:** ${newLevel}`
-          )
-          .setFooter({ text: "Lake County Roleplay • Level System" })
+          .setDescription(`🎉 ${message.author} reached **Level ${lvl}**!`)
       ]
     });
   }
@@ -129,20 +131,19 @@ client.on("messageCreate", async (message) => {
 
   /* ---- !LEVEL ---- */
   if (cmd === "level") {
-    const user = message.mentions.users.first() || message.author;
-    if (!levels[user.id]) levels[user.id] = { xp: 0, level: 1, lastXp: 0 };
+    const u = message.mentions.users.first() || message.author;
+    if (!levels[u.id]) levels[u.id] = { xp: 0, level: 1, lastXp: 0 };
 
     return message.reply({
       embeds: [
         new EmbedBuilder()
           .setColor("#3498db")
-          .setTitle("📈 Level Information")
+          .setTitle("📈 User Level")
           .setDescription(
-            `**User:** ${user}\n` +
-            `**Level:** ${levels[user.id].level}\n` +
-            `**XP:** ${levels[user.id].xp} / ${xpForLevel(levels[user.id].level)}`
+            `**User:** ${u}\n` +
+            `**Level:** ${levels[u.id].level}\n` +
+            `**XP:** ${levels[u.id].xp}/${xpForLevel(levels[u.id].level)}`
           )
-          .setFooter({ text: "Lake County Roleplay • Level System" })
       ]
     });
   }
@@ -155,15 +156,9 @@ client.on("messageCreate", async (message) => {
       .setColor("#0ea5e9")
       .setTitle("🏛️ Lake County Roleplay | Support Center")
       .setDescription(
-        "**Welcome to the official Lake County Roleplay support system.**\n\n" +
-        "Use the menu below to open a support ticket with our staff team.\n\n" +
-        "**📌 Rules:**\n" +
-        "• One issue per ticket\n" +
-        "• Be respectful\n" +
-        "• Do not ping staff\n\n" +
-        "🕒 Tickets are handled in order received."
-      )
-      .setFooter({ text: "Lake County Roleplay • Support System" });
+        "Open a ticket using the menu below.\n\n" +
+        "• One issue per ticket\n• Be respectful\n• Do not ping staff"
+      );
 
     const menu = new StringSelectMenuBuilder()
       .setCustomId("ticket_category")
@@ -183,7 +178,7 @@ client.on("messageCreate", async (message) => {
     await message.delete().catch(() => {});
   }
 
-  /* ---- SSU VOTE ---- */
+  /* ---- SSU POLL ---- */
   if (cmd === "ssuvote") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply("❌ Staff only.");
@@ -191,39 +186,68 @@ client.on("messageCreate", async (message) => {
 
     const embed = new EmbedBuilder()
       .setColor("#16a34a")
-      .setTitle("🚨 Lake County Roleplay | Server Startup Vote")
+      .setTitle("🚨 Server Startup Vote")
       .setDescription(
-        "**Server Startup (SSU) Availability Poll**\n\n" +
-        "This poll determines whether enough members are available to begin an **official Server Startup (SSU)**.\n\n" +
-        "**🗳️ How to Participate:**\n" +
-        "• Click **Attend** if you are available\n" +
-        "• Click **Can’t Attend** if unavailable\n" +
-        "• You may change or remove your vote at any time\n\n" +
-        "**📊 Requirements:**\n" +
-        "• **5 Attend votes** required\n" +
-        "• SSU auto-starts once met\n\n" +
-        "⚠️ Only vote if you plan to attend."
+        "**SSU Availability Poll**\n\n" +
+        "Vote below to indicate availability.\n\n" +
+        "**Auto-starts at 5 Attending.**"
       )
-      .setImage(SESSION_BANNER_URL)
-      .setFooter({ text: "Lake County Roleplay • Session Management" });
+      .setImage(SESSION_BANNER_URL);
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("attend").setLabel("✅ Attend (0/5)").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("cant").setLabel("❌ Can’t Attend (0)").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("attend").setLabel("Attend (0/5)").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("cant").setLabel("Can’t Attend (0)").setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId("view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
     );
 
     const msg = await message.channel.send({ embeds: [embed], components: [row] });
 
-    polls[msg.id] = {
-      channelId: msg.channel.id,
-      attend: [],
-      cant: [],
-      started: false
-    };
-
+    polls[msg.id] = { attend: [], cant: [], started: false };
     save(FILES.polls, polls);
     await message.delete().catch(() => {});
+  }
+
+  /* ---- SSU START ---- */
+  if (cmd === "ssu") {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+
+    const lastPoll = Object.values(polls).reverse().find(p => p.attend.length);
+    const mentions = lastPoll
+      ? lastPoll.attend.map(id => `<@${id}>`).join(" ")
+      : "";
+
+    const embed = new EmbedBuilder()
+      .setColor("#22c55e")
+      .setTitle("🚨 Server Startup!")
+      .setDescription(
+        "A game session has begun.\n\n" +
+        "**Server Information:**\n" +
+        `Game Code: **${SERVER_INFO.code}**\n` +
+        `Server Owner: **${SERVER_INFO.owner}**\n\n` +
+        "*Those who reacted must join.*"
+      );
+
+    await message.channel.send({
+      content: `${SSU_PING_EVERYONE ? "@everyone" : ""} ${SSU_ROLE_PING ? `<@&${SSU_ROLE_PING}>` : ""}\n${mentions}`,
+      embeds: [embed]
+    });
+  }
+
+  /* ---- SSD ---- */
+  if (cmd === "ssd") {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+
+    const embed = new EmbedBuilder()
+      .setColor("#dc2626")
+      .setTitle("🔕 Server Shutdown!")
+      .setDescription(
+        "LCRPC has shut down temporarily.\n\n" +
+        "**Server Information:**\n" +
+        `Game Code: **${SERVER_INFO.code}**\n` +
+        `Server Owner: **${SERVER_INFO.owner}**`
+      );
+
+    await message.channel.send({ embeds: [embed] });
   }
 });
 
@@ -233,10 +257,9 @@ client.on("messageCreate", async (message) => {
 client.on("interactionCreate", async (interaction) => {
   try {
 
-    /* ---- SESSION POLL BUTTONS ---- */
+    /* ---- POLL BUTTONS ---- */
     if (interaction.isButton() && polls[interaction.message.id]) {
       await interaction.deferReply({ ephemeral: true });
-
       const poll = polls[interaction.message.id];
       const uid = interaction.user.id;
 
@@ -244,52 +267,45 @@ client.on("interactionCreate", async (interaction) => {
         return interaction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle("👀 Session Poll Voters")
+              .setTitle("👀 Voters")
               .addFields(
-                { name: "✅ Attend", value: poll.attend.map(id => `<@${id}>`).join("\n") || "None" },
-                { name: "❌ Can’t Attend", value: poll.cant.map(id => `<@${id}>`).join("\n") || "None" }
+                { name: "Attend", value: poll.attend.map(id => `<@${id}>`).join("\n") || "None" },
+                { name: "Can't Attend", value: poll.cant.map(id => `<@${id}>`).join("\n") || "None" }
               )
           ]
         });
       }
 
-      if (poll.started) {
-        return interaction.editReply("🔒 Voting closed.");
-      }
-
       if (interaction.customId === "attend") {
         poll.attend.includes(uid)
-          ? poll.attend = poll.attend.filter(id => id !== uid)
-          : (poll.cant = poll.cant.filter(id => id !== uid), poll.attend.push(uid));
+          ? poll.attend = poll.attend.filter(i => i !== uid)
+          : (poll.cant = poll.cant.filter(i => i !== uid), poll.attend.push(uid));
       }
 
       if (interaction.customId === "cant") {
         poll.cant.includes(uid)
-          ? poll.cant = poll.cant.filter(id => id !== uid)
-          : (poll.attend = poll.attend.filter(id => id !== uid), poll.cant.push(uid));
+          ? poll.cant = poll.cant.filter(i => i !== uid)
+          : (poll.attend = poll.attend.filter(i => i !== uid), poll.cant.push(uid));
       }
 
-      if (poll.attend.length >= 5 && !poll.started) {
-        poll.started = true;
-        await interaction.channel.send(
-          SSU_PING_ROLE_ID ? `<@&${SSU_PING_ROLE_ID}>` : "@everyone"
-        );
-      }
-
+      if (poll.attend.length >= 5) poll.started = true;
       save(FILES.polls, polls);
 
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("attend").setLabel(`Attend (${poll.attend.length}/5)`).setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("cant").setLabel(`Can’t Attend (${poll.cant.length})`).setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId("view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
-      );
+      await interaction.message.edit({
+        components: [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId("attend").setLabel(`Attend (${poll.attend.length}/5)`).setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId("cant").setLabel(`Can’t Attend (${poll.cant.length})`).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId("view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
+          )
+        ]
+      });
 
-      await interaction.message.edit({ components: [row] });
       return interaction.editReply("✅ Vote updated.");
     }
 
-  } catch (err) {
-    console.error("INTERACTION ERROR:", err);
+  } catch (e) {
+    console.error("INTERACTION ERROR:", e);
   }
 });
 
