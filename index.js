@@ -190,25 +190,16 @@ client.on("guildMemberAdd", async (member) => {
   const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
   if (!channel) return;
 
-  const count = member.guild.memberCount;
-
   const message =
     `:wavinghand: \`\` - \`\` Welcome ${member} to **Lake County Roleplay!** ` +
-    `You are our **${count}** member, we hope you enjoy your stay!\n` +
+    `You are our **${member.guild.memberCount}** member, we hope you enjoy your stay!\n` +
     `-# Ensure to verify to gain access to all of our channels and stop in-game Private Messages.`;
 
   const row = new ActionRowBuilder().addComponents(
-    // VERIFY LINK BUTTON
     new ButtonBuilder()
       .setLabel("Verify")
       .setStyle(ButtonStyle.Link)
-      .setURL("https://blox.link/"),
-
-    // MEMBER COUNT (DISABLED)
-    new ButtonBuilder()
-      .setLabel(`👥 Members: ${count}`)
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(true)
+      .setURL("https://blox.link/")
   );
 
   channel.send({
