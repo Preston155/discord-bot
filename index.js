@@ -20,9 +20,9 @@ const client = new Client({
   ]
 });
 
-// =====================
-// CONFIG
-// =====================
+/* =====================
+   CONFIG
+===================== */
 const PREFIX = "!";
 const SUPPORT_ROLE_ID = "1282417060391161978";
 const SSU_PING_ROLE_ID = null; // null = @everyone
@@ -37,118 +37,76 @@ const CATEGORIES = {
   management_support: "1468277029865783489"
 };
 
-// =====================
-// LEVEL SYSTEM CONFIG
-// =====================
-const LEVEL_XP_COOLDOWN = 60 * 1000; // 1 minute
+/* =====================
+   LEVEL CONFIG
+===================== */
+const LEVEL_XP_COOLDOWN = 60 * 1000;
 const XP_MIN = 10;
 const XP_MAX = 20;
 
-// =====================
-// DATA FILE SETUP
-// =====================
+/* =====================
+   DATA FILES
+===================== */
 const DATA_DIR = path.join(__dirname, "data");
-const POLLS_FILE = path.join(DATA_DIR, "polls.json");
-const TICKETS_FILE = path.join(DATA_DIR, "tickets.json");
-const LEVELS_FILE = path.join(DATA_DIR, "levels.json");
+const FILES = {
+  polls: path.join(DATA_DIR, "polls.json"),
+  tickets: path.join(DATA_DIR, "tickets.json"),
+  levels: path.join(DATA_DIR, "levels.json")
+};
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
-if (!fs.existsSync(POLLS_FILE)) fs.writeFileSync(POLLS_FILE, "{}");
-if (!fs.existsSync(TICKETS_FILE)) fs.writeFileSync(TICKETS_FILE, "{}");
-if (!fs.existsSync(LEVELS_FILE)) fs.writeFileSync(LEVELS_FILE, "{}");
+for (const file of Object.values(FILES)) {
+  if (!fs.existsSync(file)) fs.writeFileSync(file, "{}");
+}
 
-const loadJSON = (file) => JSON.parse(fs.readFileSync(file, "utf8"));
-const saveJSON = (file, data) => fs.writeFileSync(file, JSON.stringify(data, null, 2));
+const load = (f) => JSON.parse(fs.readFileSync(f, "utf8"));
+const save = (f, d) => fs.writeFileSync(f, JSON.stringify(d, null, 2));
 
-let polls = loadJSON(POLLS_FILE);
-let tickets = loadJSON(TICKETS_FILE);
-let levels = loadJSON(LEVELS_FILE);
+let polls = load(FILES.polls);
+let tickets = load(FILES.tickets);
+let levels = load(FILES.levels);
 
-// =====================
-// LEVEL FUNCTIONS
-// =====================
-function getXpForLevel(level) {
+/* =====================
+   LEVEL FUNCTIONS
+===================== */
+function xpForLevel(level) {
   return Math.floor(100 * level * 1.5);
 }
 
 function addXp(userId) {
   const now = Date.now();
-
-  if (!levels[userId]) {
-    levels[userId] = { xp: 0, level: 1, lastXp: 0 };
-  }
-
+  if (!levels[userId]) levels[userId] = { xp: 0, level: 1, lastXp: 0 };
   if (now - levels[userId].lastXp < LEVEL_XP_COOLDOWN) return null;
 
-  const xpGain = Math.floor(Math.random() * (XP_MAX - XP_MIN + 1)) + XP_MIN;
-  levels[userId].xp += xpGain;
+  const gain = Math.floor(Math.random() * (XP_MAX - XP_MIN + 1)) + XP_MIN;
+  levels[userId].xp += gain;
   levels[userId].lastXp = now;
 
-  let leveledUp = false;
-
-  while (levels[userId].xp >= getXpForLevel(levels[userId].level)) {
-    levels[userId].xp -= getXpForLevel(levels[userId].level);
+  let leveled = false;
+  while (levels[userId].xp >= xpForLevel(levels[userId].level)) {
+    levels[userId].xp -= xpForLevel(levels[userId].level);
     levels[userId].level++;
-    leveledUp = true;
+    leveled = true;
   }
 
-  saveJSON(LEVELS_FILE, levels);
-  return leveledUp ? levels[userId].level : null;
+  save(FILES.levels, levels);
+  return leveled ? levels[userId].level : null;
 }
 
-// =====================
-// READY
-// =====================
+/* =====================
+   READY
+===================== */
 client.once("ready", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
-// =====================
-// BUILD TICKET PANEL
-// =====================
-function buildPanel() {
-  const embed = new EmbedBuilder()
-    .setColor("#00b0f4")
-    .setTitle("🏛️ Lake County Roleplay | Assistance Center")
-    .setDescription(
-      "**Official Support System**\n\n" +
-      "Select a category below to contact staff.\n\n" +
-      "**Rules:**\n" +
-      "• One issue per ticket\n" +
-      "• Be respectful\n" +
-      "• Do NOT ping staff\n\n" +
-      "**Categories:**\n" +
-      "👥 General Support\n" +
-      "🤝 Partnership Support\n" +
-      "🛡️ Internal Affairs\n" +
-      "👑 Management Support"
-    );
-
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId("ticket_category")
-    .setPlaceholder("Select a support category…")
-    .addOptions(
-      { label: "General Support", value: "general_support", emoji: "👥" },
-      { label: "Partnership Support", value: "partnership_support", emoji: "🤝" },
-      { label: "Internal Affairs", value: "ia_support", emoji: "🛡️" },
-      { label: "Management Support", value: "management_support", emoji: "👑" }
-    );
-
-  return {
-    embeds: [embed],
-    components: [new ActionRowBuilder().addComponents(menu)]
-  };
-}
-
-// =====================
-// MESSAGE CREATE
-// =====================
+/* =====================
+   MESSAGE CREATE
+===================== */
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
-  // =====================
-  // LEVEL XP GAIN
-  // =====================
+  /* ---- XP SYSTEM ---- */
   const newLevel = addXp(message.author.id);
   if (newLevel) {
     message.channel.send({
@@ -157,47 +115,86 @@ client.on("messageCreate", async (message) => {
           .setColor("#f1c40f")
           .setTitle("⬆️ Level Up!")
           .setDescription(
-            `🎉 **${message.author} leveled up!**\n\n` +
-            `**New Level:** ${newLevel}\n` +
-            "Keep chatting to earn more XP!"
+            `🎉 ${message.author} leveled up!\n\n` +
+            `**New Level:** ${newLevel}`
           )
-          .setFooter({ text: "Lake County Roleplay • Level System" })
       ]
     });
   }
 
   if (!message.content.startsWith(PREFIX)) return;
+  const args = message.content.slice(PREFIX.length).split(/ +/);
+  const cmd = args.shift().toLowerCase();
 
-  // SEND TICKET PANEL
-  if (message.content === "!sendpanel") {
+  /* ---- !LEVEL ---- */
+  if (cmd === "level") {
+    const user = message.mentions.users.first() || message.author;
+    if (!levels[user.id]) levels[user.id] = { xp: 0, level: 1, lastXp: 0 };
+
+    return message.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#3498db")
+          .setTitle("📈 Level Information")
+          .setDescription(
+            `**User:** ${user}\n` +
+            `**Level:** ${levels[user.id].level}\n` +
+            `**XP:** ${levels[user.id].xp} / ${xpForLevel(levels[user.id].level)}`
+          )
+      ]
+    });
+  }
+
+  /* ---- SEND TICKET PANEL ---- */
+  if (cmd === "sendpanel") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+
+    const embed = new EmbedBuilder()
+      .setColor("#00b0f4")
+      .setTitle("🏛️ Lake County Roleplay | Assistance Center")
+      .setDescription(
+        "Select a category below to contact staff.\n\n" +
+        "• One issue per ticket\n• Be respectful\n• Do not ping staff"
+      );
+
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId("ticket_category")
+      .setPlaceholder("Select a category…")
+      .addOptions(
+        { label: "General Support", value: "general_support", emoji: "👥" },
+        { label: "Partnership Support", value: "partnership_support", emoji: "🤝" },
+        { label: "Internal Affairs", value: "ia_support", emoji: "🛡️" },
+        { label: "Management Support", value: "management_support", emoji: "👑" }
+      );
+
+    await message.channel.send({
+      embeds: [embed],
+      components: [new ActionRowBuilder().addComponents(menu)]
+    });
+
     await message.delete().catch(() => {});
-    await message.channel.send(buildPanel());
   }
 });
 
-// =====================
-// INTERACTIONS
-// =====================
+/* =====================
+   INTERACTIONS
+===================== */
 client.on("interactionCreate", async (interaction) => {
   try {
 
-    // =====================
-    // CREATE TICKET
-    // =====================
+    /* ---- TICKET CREATION ---- */
     if (interaction.isStringSelectMenu() && interaction.customId === "ticket_category") {
       await interaction.deferReply({ ephemeral: true });
 
       const { guild, user } = interaction;
-      const category = interaction.values[0];
-
+      const cat = interaction.values[0];
       const clean = user.username.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12);
       const num = Math.floor(1000 + Math.random() * 9000);
       const role = await guild.roles.fetch(SUPPORT_ROLE_ID);
 
       const channel = await guild.channels.create({
         name: `${clean}-${num}`,
-        parent: CATEGORIES[category],
+        parent: CATEGORIES[cat],
         permissionOverwrites: [
           { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
           { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
@@ -206,11 +203,11 @@ client.on("interactionCreate", async (interaction) => {
       });
 
       tickets[channel.id] = { owner: user.id, claimed: null, status: "open" };
-      saveJSON(TICKETS_FILE, tickets);
+      save(FILES.tickets, tickets);
 
       const embed = new EmbedBuilder()
         .setColor("#00b0f4")
-        .setTitle("🎟️ Support Ticket Opened")
+        .setTitle("🎟️ Support Ticket")
         .setDescription(
           `**User:** <@${user.id}>\n` +
           "**Status:** 🟡 Open\n" +
@@ -229,61 +226,12 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.editReply({ content: `✅ Ticket created: ${channel}` });
     }
 
-    // =====================
-    // TICKET BUTTONS
-    // =====================
-    if (interaction.isButton() && ["claim", "unclaim", "close"].includes(interaction.customId)) {
-      const ticket = tickets[interaction.channel.id];
-      if (!ticket) return interaction.reply({ content: "❌ Ticket data missing.", ephemeral: true });
-
-      if (
-        !interaction.member.roles.cache.has(SUPPORT_ROLE_ID) &&
-        !interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)
-      ) {
-        return interaction.reply({ content: "❌ Staff only.", ephemeral: true });
-      }
-
-      if (interaction.customId === "claim") {
-        if (ticket.claimed) return interaction.reply({ content: "Already claimed.", ephemeral: true });
-        ticket.claimed = interaction.user.id;
-        ticket.status = "claimed";
-      }
-
-      if (interaction.customId === "unclaim") {
-        if (ticket.claimed !== interaction.user.id)
-          return interaction.reply({ content: "You didn't claim this.", ephemeral: true });
-        ticket.claimed = null;
-        ticket.status = "open";
-      }
-
-      if (interaction.customId === "close") {
-        delete tickets[interaction.channel.id];
-        saveJSON(TICKETS_FILE, tickets);
-        await interaction.reply("Closing ticket...");
-        return setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
-      }
-
-      saveJSON(TICKETS_FILE, tickets);
-
-      const embed = new EmbedBuilder()
-        .setColor("#00b0f4")
-        .setTitle("🎟️ Support Ticket")
-        .setDescription(
-          `**User:** <@${ticket.owner}>\n` +
-          `**Status:** ${ticket.status === "claimed" ? "🟢 Claimed" : "🟡 Open"}\n` +
-          `**Claimed By:** ${ticket.claimed ? `<@${ticket.claimed}>` : "❌ Unclaimed"}`
-        );
-
-      await interaction.message.edit({ embeds: [embed] });
-      return interaction.reply({ content: "✅ Ticket updated.", ephemeral: true });
-    }
-
   } catch (err) {
-    console.error("ERROR:", err);
+    console.error("INTERACTION ERROR:", err);
   }
 });
 
-// =====================
-// LOGIN
-// =====================
+/* =====================
+   LOGIN
+===================== */
 client.login(process.env.TOKEN);
