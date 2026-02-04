@@ -64,7 +64,17 @@ for (const f of Object.values(FILES)) {
   if (!fs.existsSync(p)) fs.writeFileSync(p, "{}");
 }
 
-const load = (f) => JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), "utf8"));
+const load = (f) => {
+  const filePath = path.join(DATA_DIR, f);
+  try {
+    if (!fs.existsSync(filePath)) return {};
+    const raw = fs.readFileSync(filePath, "utf8");
+    return raw ? JSON.parse(raw) : {};
+  } catch (err) {
+    console.error(`⚠️ Failed to load ${f}, resetting file.`);
+    return {};
+  }
+};
 const save = (f, d) =>
   fs.writeFileSync(path.join(DATA_DIR, f), JSON.stringify(d, null, 2));
 
@@ -134,11 +144,16 @@ function xpForLevel(lvl) {
 
 function addXP(id) {
   const now = Date.now();
-  if (!levels[id]) levels[id] = { xp: 0, level: 1, last: 0 };
+
+  if (!levels[id]) {
+    levels[id] = { xp: 0, level: 1, last: 0 };
+  }
+
   if (now - levels[id].last < XP_COOLDOWN) return null;
 
   const gain =
     Math.floor(Math.random() * (XP_MAX - XP_MIN + 1)) + XP_MIN;
+
   levels[id].xp += gain;
   levels[id].last = now;
 
@@ -149,7 +164,13 @@ function addXP(id) {
     leveled = true;
   }
 
-  save(FILES.levels, levels);
+  // 🔐 FORCE SAVE EVERY XP CHANGE
+  try {
+    save(FILES.levels, levels);
+  } catch (e) {
+    console.error("❌ Failed to save levels:", e);
+  }
+
   return leveled ? levels[id].level : null;
 }
 
@@ -610,6 +631,21 @@ if (interaction.isButton() && interaction.customId.startsWith("dash_jump_")) {
     }
   }
 });
+
+const gracefulShutdown = () => {
+  console.log("🛑 Saving level data before shutdown...");
+  try {
+    save(FILES.levels, levels);
+    console.log("✅ Levels saved.");
+  } catch (e) {
+    console.error("❌ Failed to save levels on shutdown:", e);
+  }
+  process.exit(0);
+};
+
+process.on("SIGINT", gracefulShutdown);
+process.on("SIGTERM", gracefulShutdown);
+process.on("exit", gracefulShutdown);
 
 // =====================
 // LOGIN
