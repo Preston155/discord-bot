@@ -420,22 +420,77 @@ if (interaction.isButton() && interaction.customId.startsWith("dash_")) {
     });
   }
 
-  // VIEW OPEN TICKETS
-  if (interaction.customId === "dash_tickets") {
-    const list = Object.entries(tickets)
-      .map(([id, t]) => `• <#${id}> — <@${t.owner}>`)
-      .join("\n") || "No open tickets.";
+// VIEW OPEN TICKETS + JUMP BUTTONS
+if (interaction.customId === "dash_tickets") {
+  const entries = Object.entries(tickets);
 
+  if (entries.length === 0) {
     return interaction.reply({
       ephemeral: true,
       embeds: [
         new EmbedBuilder()
           .setColor("#2563eb")
           .setTitle("🎟️ Open Tickets")
-          .setDescription(list)
+          .setDescription("There are currently no open tickets.")
       ]
     });
   }
+
+  const embed = new EmbedBuilder()
+    .setColor("#2563eb")
+    .setTitle("🎟️ Open Tickets")
+    .setDescription(
+      entries
+        .slice(0, 5) // Discord button limit safety
+        .map(([id, t], i) =>
+          `**${i + 1}.** <#${id}>\nOpened by: <@${t.owner}>`
+        )
+        .join("\n\n")
+    )
+    .setFooter({
+      text: "Click a button below to jump to the ticket"
+    });
+
+  const row = new ActionRowBuilder().addComponents(
+    entries.slice(0, 5).map(([id], i) =>
+      new ButtonBuilder()
+        .setCustomId(`dash_jump_${id}`)
+        .setLabel(`Jump ${i + 1}`)
+        .setStyle(ButtonStyle.Secondary)
+    )
+  );
+
+  return interaction.reply({
+    ephemeral: true,
+    embeds: [embed],
+    components: [row]
+  });
+}
+
+// DASHBOARD → JUMP TO TICKET
+if (interaction.isButton() && interaction.customId.startsWith("dash_jump_")) {
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({
+      content: "❌ Staff only.",
+      ephemeral: true
+    });
+  }
+
+  const channelId = interaction.customId.replace("dash_jump_", "");
+  const channel = interaction.guild.channels.cache.get(channelId);
+
+  if (!channel) {
+    return interaction.reply({
+      content: "⚠️ That ticket channel no longer exists.",
+      ephemeral: true
+    });
+  }
+
+  return interaction.reply({
+    ephemeral: true,
+    content: `➡️ Jump to ticket: ${channel}`
+  });
+}
 
   // VIEW SSU STATUS
   if (interaction.customId === "dash_ssu") {
