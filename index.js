@@ -47,7 +47,7 @@ const CATEGORIES = {
 };
 
 // =====================
-// DATA STORAGE
+// DATA STORAGE (JSON)
 // =====================
 const DATA_DIR = path.join(__dirname, "data");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
@@ -184,9 +184,7 @@ client.on("messageCreate", async (message) => {
   const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
   const cmd = args.shift().toLowerCase();
 
-  // =====================
-  // LEVEL CHECK
-  // =====================
+  // LEVEL
   if (cmd === "level") {
     const u = message.mentions.users.first() || message.author;
     const d = levels[u.id] || { level: 1, xp: 0 };
@@ -202,9 +200,7 @@ client.on("messageCreate", async (message) => {
     });
   }
 
-  // =====================
-  // SEND TICKET PANEL
-  // =====================
+  // SEND PANEL
   if (cmd === "sendpanel" && isStaff(message.member)) {
     const embed = new EmbedBuilder()
       .setColor("#2563eb")
@@ -229,43 +225,74 @@ client.on("messageCreate", async (message) => {
     });
   }
 
-  // =====================
   // SSU VOTE
-  // =====================
   if (cmd === "ssuvote" && isStaff(message.member)) {
     const embed = new EmbedBuilder()
       .setColor("#16a34a")
       .setTitle("🚨 Server Startup Vote")
-      .setDescription("Vote below.\n\nAuto-starts at **5 attending**.")
+      .setDescription(
+        "**A Server Startup (SSU) is being proposed.**\n\n" +
+
+    "Please review the information below **before voting**:\n\n" +
+
+    "🟢 **Attend** — You are able and willing to participate in this session\n" +
+    "🔴 **Can’t Attend** — You are unavailable for this session\n\n" +
+
+    "📋 **Voting Guidelines**\n" +
+    "• Only vote **Attend** if you fully intend to join\n" +
+    "• You may change or remove your vote at any time\n" +
+    "• Do **not** vote as a joke or to inflate numbers\n\n" +
+
+    "⚙️ **Session Rules**\n" +
+    "• The server will **automatically start once 5 players vote Attend**\n" +
+    "• Staff may manually start or cancel the session if needed\n\n" +
+
+    "Thank you for helping us keep sessions organized and professional."
+      )
+      .setFooter({ text: "Lake County Roleplay • Session Management" })
       .setImage(SESSION_BANNER_URL);
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("poll_attend")
-        .setLabel("Attend (0/5)")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId("poll_cant")
-        .setLabel("Can’t Attend (0)")
-        .setStyle(ButtonStyle.Danger),
-      new ButtonBuilder()
-        .setCustomId("poll_view")
-        .setLabel("👀 View Voters")
-        .setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId("poll_attend").setLabel("Attend (0/5)").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("poll_cant").setLabel("Can’t Attend (0)").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("poll_view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
     );
 
-    const msg = await message.channel.send({
-      embeds: [embed],
-      components: [row]
-    });
-
+    const msg = await message.channel.send({ embeds: [embed], components: [row] });
     polls[msg.id] = { attend: [], cant: [], started: false };
     save(FILES.polls, polls);
   }
 
-  // =====================
+  // SSU / SSD
+  if (cmd === "ssu" && isStaff(message.member)) {
+    const poll = Object.values(polls).reverse()[0];
+    if (!poll) return;
+
+    message.channel.send({
+      content: `<@&${SSU_ROLE_PING}>\n${poll.attend.map(i=>`<@${i}>`).join(" ")}`,
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#22c55e")
+          .setTitle("🚨 Server Startup!")
+          .setDescription(
+            `Game Code: **${SERVER_INFO.code}**\nServer Owner: **${SERVER_INFO.owner}**`
+          )
+      ]
+    });
+  }
+
+  if (cmd === "ssd" && isStaff(message.member)) {
+    message.channel.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#dc2626")
+          .setTitle("🔕 Server Shutdown")
+          .setDescription("The server has shut down temporarily.")
+      ]
+    });
+  }
+
   // MODERATION
-  // =====================
   if (["warn","kick","ban","unban"].includes(cmd) && !isStaff(message.member)) return;
 
   if (cmd === "warn") {
@@ -352,25 +379,24 @@ client.on("interactionCreate", async (interaction) => {
 
     if (interaction.customId === "ticket_claim") {
       ticket.claimedBy = interaction.user.id;
-      save(FILES.tickets, tickets);
-      return interaction.reply({ content: "✅ Ticket claimed.", ephemeral: true });
     }
 
     if (interaction.customId === "ticket_unclaim") {
       ticket.claimedBy = null;
-      save(FILES.tickets, tickets);
-      return interaction.reply({ content: "ℹ️ Ticket unclaimed.", ephemeral: true });
     }
 
     if (interaction.customId === "ticket_close") {
       delete tickets[interaction.channelId];
       save(FILES.tickets, tickets);
       await interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
-      setTimeout(() => interaction.channel.delete(), 3000);
+      return setTimeout(() => interaction.channel.delete(), 3000);
     }
+
+    save(FILES.tickets, tickets);
+    return interaction.reply({ content: "✅ Updated.", ephemeral: true });
   }
 
-  // SSU voting + AUTO START
+  // SSU voting (TOGGLE + AUTO)
   if (interaction.isButton() && polls[interaction.message.id]) {
     const poll = polls[interaction.message.id];
     const uid = interaction.user.id;
@@ -390,16 +416,23 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     if (interaction.customId === "poll_attend") {
-      poll.cant = poll.cant.filter(i => i !== uid);
-      if (!poll.attend.includes(uid)) poll.attend.push(uid);
+      if (poll.attend.includes(uid)) {
+        poll.attend = poll.attend.filter(i => i !== uid);
+      } else {
+        poll.cant = poll.cant.filter(i => i !== uid);
+        poll.attend.push(uid);
+      }
     }
 
     if (interaction.customId === "poll_cant") {
-      poll.attend = poll.attend.filter(i => i !== uid);
-      if (!poll.cant.includes(uid)) poll.cant.push(uid);
+      if (poll.cant.includes(uid)) {
+        poll.cant = poll.cant.filter(i => i !== uid);
+      } else {
+        poll.attend = poll.attend.filter(i => i !== uid);
+        poll.cant.push(uid);
+      }
     }
 
-    // AUTO SSU
     if (poll.attend.length >= 5 && !poll.started) {
       poll.started = true;
       interaction.channel.send({
