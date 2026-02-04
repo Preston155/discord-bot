@@ -35,6 +35,8 @@ const SUPPORT_ROLE_ID = "1282417060391161978";
 const SSU_ROLE_PING = "1468213717035384882";
 const MOD_LOG_CHANNEL_ID = "1461008751749234740";
 
+const LEVEL_UP_CHANNEL_ID = "1467677377319534662";
+
 const SERVER_INFO = { code: "ILCRPC", owner: "MiningMavenYT" };
 const SESSION_BANNER_URL =
   "https://media.discordapp.net/attachments/1452829338545160285/1466919030127591613/ILLEGAL_FIREARM_1.png";
@@ -187,20 +189,27 @@ client.once("ready", () => {
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
-  const lvlUp = addXP(message.author.id);
-  if (lvlUp) {
-    message.channel.send({
+const lvlUp = addXP(message.author.id);
+if (lvlUp) {
+  const levelChannel = message.guild.channels.cache.get(LEVEL_UP_CHANNEL_ID);
+
+  if (levelChannel) {
+    levelChannel.send({
       embeds: [
         new EmbedBuilder()
           .setColor("#facc15")
           .setTitle("⬆️ Level Up!")
           .setDescription(
-            `${message.author} reached **Level ${lvlUp}**!`
+            `${message.author} has reached **Level ${lvlUp}**! 🎉`
           )
+          .setFooter({
+            text: "Lake County Roleplay • Level System"
+          })
+          .setTimestamp()
       ]
     });
   }
-
+}
   if (!message.content.startsWith(PREFIX)) return;
   const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
   const cmd = args.shift().toLowerCase();
