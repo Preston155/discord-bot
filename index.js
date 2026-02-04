@@ -198,11 +198,13 @@ client.on("guildMemberAdd", async (member) => {
     `-# Ensure to verify to gain access to all of our channels and stop in-game Private Messages.`;
 
   const row = new ActionRowBuilder().addComponents(
+    // VERIFY LINK BUTTON
     new ButtonBuilder()
       .setLabel("Verify")
       .setStyle(ButtonStyle.Link)
       .setURL("https://blox.link/"),
 
+    // MEMBER COUNT (DISABLED)
     new ButtonBuilder()
       .setLabel(`👥 Members: ${count}`)
       .setStyle(ButtonStyle.Secondary)
