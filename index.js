@@ -78,13 +78,10 @@ if (!cases.lastCase) cases.lastCase = 0;
 // =====================
 // HELPERS
 // =====================
-async function getTargetMember(message) {
-  const mention = message.mentions.members.first();
-  if (mention) return mention;
-
-  const id = message.content.split(/ +/)[1];
+async function resolveMember(message, index = 0) {
+  if (message.mentions.members.first()) return message.mentions.members.first();
+  const id = message.content.split(/\s+/)[index + 1];
   if (!id) return null;
-
   try {
     return await message.guild.members.fetch(id);
   } catch {
@@ -99,20 +96,23 @@ function createCase(action, target, moderator, reason) {
   cases[id] = { action, target, moderator, reason, time: Date.now() };
   save(FILES.cases, cases);
 
-  const embed = new EmbedBuilder()
-    .setColor("#dc2626")
-    .setTitle(`📁 Case #${id}`)
-    .addFields(
-      { name: "Action", value: action, inline: true },
-      { name: "User", value: `<@${target}>`, inline: true },
-      { name: "Moderator", value: `<@${moderator}>`, inline: true },
-      { name: "Reason", value: reason }
-    )
-    .setTimestamp();
-
-  const ch = client.channels.cache.get(MOD_LOG_CHANNEL_ID);
-  if (ch) ch.send({ embeds: [embed] });
-
+  const log = client.channels.cache.get(MOD_LOG_CHANNEL_ID);
+  if (log) {
+    log.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#dc2626")
+          .setTitle(`📁 Case #${id}`)
+          .addFields(
+            { name: "Action", value: action, inline: true },
+            { name: "User", value: `<@${target}>`, inline: true },
+            { name: "Moderator", value: `<@${moderator}>`, inline: true },
+            { name: "Reason", value: reason }
+          )
+          .setTimestamp()
+      ]
+    });
+  }
   return id;
 }
 
@@ -121,7 +121,7 @@ function createCase(action, target, moderator, reason) {
 // =====================
 const XP_MIN = 10;
 const XP_MAX = 20;
-const XP_COOLDOWN = 60_000;
+const XP_COOLDOWN = 60000;
 
 function xpForLevel(lvl) {
   return Math.floor(100 * lvl * 1.5);
@@ -136,15 +136,15 @@ function addXP(id) {
   levels[id].xp += gain;
   levels[id].last = now;
 
-  let up = false;
+  let leveled = false;
   while (levels[id].xp >= xpForLevel(levels[id].level)) {
     levels[id].xp -= xpForLevel(levels[id].level);
     levels[id].level++;
-    up = true;
+    leveled = true;
   }
 
   save(FILES.levels, levels);
-  return up ? levels[id].level : null;
+  return leveled ? levels[id].level : null;
 }
 
 // =====================
@@ -160,20 +160,24 @@ client.once("ready", () => {
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
-  // XP
-  const lvl = addXP(message.author.id);
-  if (lvl) {
+  const levelUp = addXP(message.author.id);
+  if (levelUp) {
     message.channel.send({
-      embeds: [new EmbedBuilder().setColor("#facc15").setTitle("⬆️ Level Up!").setDescription(`${message.author} reached **Level ${lvl}**!`)]
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#facc15")
+          .setTitle("⬆️ Level Up!")
+          .setDescription(`${message.author} reached **Level ${levelUp}**!`)
+      ]
     });
   }
 
   if (!message.content.startsWith(PREFIX)) return;
-  const args = message.content.slice(PREFIX.length).split(/ +/);
+  const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
   const cmd = args.shift().toLowerCase();
 
   // =====================
-  // TICKET PANEL
+  // SEND TICKET PANEL
   // =====================
   if (cmd === "sendpanel") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
@@ -182,7 +186,7 @@ client.on("messageCreate", async (message) => {
       .setColor("#2563eb")
       .setTitle("🎟️ Support Tickets — Lake County Roleplay")
       .setDescription(
-        "Select the correct department below.\n\n" +
+        "**Select a department below**\n\n" +
         "• One issue per ticket\n" +
         "• Do not ping staff\n" +
         "• Be respectful"
@@ -193,7 +197,7 @@ client.on("messageCreate", async (message) => {
       .setPlaceholder("Select a category")
       .addOptions(
         { label: "General Support", value: "general_support", emoji: "🎫" },
-        { label: "Partnership", value: "partnership_support", emoji: "🤝" },
+        { label: "Partnerships", value: "partnership_support", emoji: "🤝" },
         { label: "Internal Affairs", value: "ia_support", emoji: "🛡️" },
         { label: "Management", value: "management_support", emoji: "👑" }
       );
@@ -244,7 +248,11 @@ client.on("messageCreate", async (message) => {
         new EmbedBuilder()
           .setColor("#22c55e")
           .setTitle("🚨 Server Startup!")
-          .setDescription(`Game Code: **${SERVER_INFO.code}**\nServer Owner: **${SERVER_INFO.owner}**`)
+          .setDescription(
+            `**Server Information**\n` +
+            `Game Code: **${SERVER_INFO.code}**\n` +
+            `Server Owner: **${SERVER_INFO.owner}**`
+          )
       ]
     });
   }
@@ -252,7 +260,12 @@ client.on("messageCreate", async (message) => {
   if (cmd === "ssd") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
     message.channel.send({
-      embeds: [new EmbedBuilder().setColor("#dc2626").setTitle("🔕 Server Shutdown").setDescription("Server has shut down.")]
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#dc2626")
+          .setTitle("🔕 Server Shutdown")
+          .setDescription("The server has shut down temporarily.")
+      ]
     });
   }
 
@@ -261,25 +274,29 @@ client.on("messageCreate", async (message) => {
   // =====================
   if (cmd === "level") {
     const u = message.mentions.users.first() || message.author;
-    const data = levels[u.id] || { level: 1, xp: 0 };
+    const d = levels[u.id] || { level: 1, xp: 0 };
     return message.reply({
       embeds: [
         new EmbedBuilder()
           .setColor("#3b82f6")
           .setTitle("📈 Level")
-          .setDescription(`User: ${u}\nLevel: **${data.level}**\nXP: **${data.xp}/${xpForLevel(data.level)}**`)
+          .setDescription(
+            `User: ${u}\n` +
+            `Level: **${d.level}**\n` +
+            `XP: **${d.xp}/${xpForLevel(d.level)}**`
+          )
       ]
     });
   }
 
   // =====================
-  // MODERATION
+  // MODERATION COMMANDS
   // =====================
   if (cmd === "warn") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) return;
-    const target = await getTargetMember(message);
-    if (!target) return;
-    const reason = args.slice(1).join(" ") || "No reason";
+    const target = await resolveMember(message);
+    if (!target) return message.reply("❌ Provide a user mention or ID.");
+    const reason = args.join(" ") || "No reason provided";
 
     if (!moderation[target.id]) moderation[target.id] = [];
     moderation[target.id].push({ reason, mod: message.author.id, time: Date.now() });
@@ -291,7 +308,7 @@ client.on("messageCreate", async (message) => {
 
   if (cmd === "kick") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.KickMembers)) return;
-    const target = await getTargetMember(message);
+    const target = await resolveMember(message);
     if (!target) return;
     await target.kick();
     const id = createCase("Kick", target.id, message.author.id, "Kicked");
@@ -300,7 +317,7 @@ client.on("messageCreate", async (message) => {
 
   if (cmd === "ban") {
     if (!message.member.permissions.has(PermissionsBitField.Flags.BanMembers)) return;
-    const target = await getTargetMember(message);
+    const target = await resolveMember(message);
     if (!target) return;
     await target.ban();
     const id = createCase("Ban", target.id, message.author.id, "Banned");
@@ -320,9 +337,10 @@ client.on("messageCreate", async (message) => {
 // INTERACTIONS
 // =====================
 client.on("interactionCreate", async (interaction) => {
+  // Ticket creation
   if (interaction.isStringSelectMenu() && interaction.customId === "ticket_category") {
-    const categoryKey = interaction.values[0];
     const user = interaction.user;
+    const categoryKey = interaction.values[0];
 
     const channel = await interaction.guild.channels.create({
       name: `${user.username}-${Object.keys(tickets).length + 1}`,
@@ -337,7 +355,7 @@ client.on("interactionCreate", async (interaction) => {
     tickets[channel.id] = { owner: user.id, claimedBy: null };
     save(FILES.tickets, tickets);
 
-    const row = new ActionRowBuilder().addComponents(
+    const buttons = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("ticket_claim").setLabel("Claim").setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId("ticket_unclaim").setLabel("Unclaim").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("ticket_close").setLabel("Close").setStyle(ButtonStyle.Danger)
@@ -345,13 +363,19 @@ client.on("interactionCreate", async (interaction) => {
 
     await channel.send({
       content: `<@${user.id}> <@&${SUPPORT_ROLE_ID}>`,
-      embeds: [new EmbedBuilder().setColor("#22c55e").setTitle("🎫 Ticket Created").setDescription("A staff member will assist you shortly.")],
-      components: [row]
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#22c55e")
+          .setTitle("🎫 Ticket Created")
+          .setDescription("A staff member will assist you shortly.")
+      ],
+      components: [buttons]
     });
 
     return interaction.reply({ content: "✅ Ticket created.", ephemeral: true });
   }
 
+  // Ticket buttons
   if (interaction.isButton() && tickets[interaction.channelId]) {
     const ticket = tickets[interaction.channelId];
 
@@ -375,6 +399,7 @@ client.on("interactionCreate", async (interaction) => {
     }
   }
 
+  // SSU vote buttons
   if (interaction.isButton() && polls[interaction.message.id]) {
     const poll = polls[interaction.message.id];
     const uid = interaction.user.id;
