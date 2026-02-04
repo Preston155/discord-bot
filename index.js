@@ -135,7 +135,7 @@ client.on("messageCreate", async (message) => {
       embeds: [
         new EmbedBuilder()
           .setColor("#3498db")
-          .setTitle("📈 Level Information")
+          .setTitle("📈 User Level")
           .setDescription(
             `**User:** ${user}\n` +
             `**Level:** ${levels[user.id].level}\n` +
@@ -150,10 +150,10 @@ client.on("messageCreate", async (message) => {
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
 
     const embed = new EmbedBuilder()
-      .setColor("#00b0f4")
-      .setTitle("🏛️ Lake County Roleplay | Assistance Center")
+      .setColor("#0ea5e9")
+      .setTitle("🏛️ Lake County Roleplay | Support Center")
       .setDescription(
-        "Select a category below to contact staff.\n\n" +
+        "Use the menu below to open a support ticket.\n\n" +
         "• One issue per ticket\n• Be respectful\n• Do not ping staff"
       );
 
@@ -174,6 +174,41 @@ client.on("messageCreate", async (message) => {
 
     await message.delete().catch(() => {});
   }
+
+  /* ---- SSU VOTE ---- */
+  if (cmd === "ssuvote") {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return message.reply("❌ Staff only.");
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor("#22c55e")
+      .setTitle("📊 Session Attendance Poll")
+      .setDescription(
+        "**Server Startup (SSU) Interest Check**\n\n" +
+        "Click below to indicate your availability.\n\n" +
+        "**Auto-starts at 5 Attend votes.**"
+      )
+      .setImage(SESSION_BANNER_URL);
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("attend").setLabel("✅ Attend (0/5)").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("cant").setLabel("❌ Can’t Attend (0)").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
+    );
+
+    const msg = await message.channel.send({ embeds: [embed], components: [row] });
+
+    polls[msg.id] = {
+      channelId: msg.channel.id,
+      attend: [],
+      cant: [],
+      started: false
+    };
+
+    save(FILES.polls, polls);
+    await message.delete().catch(() => {});
+  }
 });
 
 /* =====================
@@ -182,48 +217,59 @@ client.on("messageCreate", async (message) => {
 client.on("interactionCreate", async (interaction) => {
   try {
 
-    /* ---- TICKET CREATION ---- */
-    if (interaction.isStringSelectMenu() && interaction.customId === "ticket_category") {
+    /* ---- SESSION POLL BUTTONS ---- */
+    if (interaction.isButton() && polls[interaction.message.id]) {
       await interaction.deferReply({ ephemeral: true });
 
-      const { guild, user } = interaction;
-      const cat = interaction.values[0];
-      const clean = user.username.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12);
-      const num = Math.floor(1000 + Math.random() * 9000);
-      const role = await guild.roles.fetch(SUPPORT_ROLE_ID);
+      const poll = polls[interaction.message.id];
+      const uid = interaction.user.id;
 
-      const channel = await guild.channels.create({
-        name: `${clean}-${num}`,
-        parent: CATEGORIES[cat],
-        permissionOverwrites: [
-          { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-          { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-          { id: role.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
-        ]
-      });
+      if (interaction.customId === "view") {
+        return interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("👀 Session Poll Voters")
+              .addFields(
+                { name: "✅ Attend", value: poll.attend.map(id => `<@${id}>`).join("\n") || "None" },
+                { name: "❌ Can’t Attend", value: poll.cant.map(id => `<@${id}>`).join("\n") || "None" }
+              )
+          ]
+        });
+      }
 
-      tickets[channel.id] = { owner: user.id, claimed: null, status: "open" };
-      save(FILES.tickets, tickets);
+      if (poll.started) {
+        return interaction.editReply("🔒 Voting closed.");
+      }
 
-      const embed = new EmbedBuilder()
-        .setColor("#00b0f4")
-        .setTitle("🎟️ Support Ticket")
-        .setDescription(
-          `**User:** <@${user.id}>\n` +
-          "**Status:** 🟡 Open\n" +
-          "**Claimed By:** ❌ Unclaimed"
+      if (interaction.customId === "attend") {
+        poll.attend.includes(uid)
+          ? poll.attend = poll.attend.filter(id => id !== uid)
+          : (poll.cant = poll.cant.filter(id => id !== uid), poll.attend.push(uid));
+      }
+
+      if (interaction.customId === "cant") {
+        poll.cant.includes(uid)
+          ? poll.cant = poll.cant.filter(id => id !== uid)
+          : (poll.attend = poll.attend.filter(id => id !== uid), poll.cant.push(uid));
+      }
+
+      if (poll.attend.length >= 5 && !poll.started) {
+        poll.started = true;
+        await interaction.channel.send(
+          SSU_PING_ROLE_ID ? `<@&${SSU_PING_ROLE_ID}>` : "@everyone"
         );
+      }
 
-      const buttons = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("claim").setLabel("Claim").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("unclaim").setLabel("Unclaim").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("close").setLabel("Close").setStyle(ButtonStyle.Danger)
+      save(FILES.polls, polls);
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("attend").setLabel(`Attend (${poll.attend.length}/5)`).setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId("cant").setLabel(`Can’t Attend (${poll.cant.length})`).setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId("view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
       );
 
-      await channel.send(`<@&${role.id}> | <@${user.id}>`);
-      await channel.send({ embeds: [embed], components: [buttons] });
-
-      return interaction.editReply({ content: `✅ Ticket created: ${channel}` });
+      await interaction.message.edit({ components: [row] });
+      return interaction.editReply("✅ Vote updated.");
     }
 
   } catch (err) {
