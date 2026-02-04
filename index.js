@@ -197,10 +197,9 @@ client.on("guildMemberAdd", async (member) => {
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("verify_member")
       .setLabel("Verify")
-      .setStyle(ButtonStyle.Success)
-      .setEmoji("✅")
+      .setStyle(ButtonStyle.Link)
+      .setURL("https://blox.link/")
   );
 
   channel.send({
@@ -208,6 +207,7 @@ client.on("guildMemberAdd", async (member) => {
     components: [row]
   });
 });
+
 
 
 // =====================
