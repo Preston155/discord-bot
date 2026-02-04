@@ -202,12 +202,25 @@ client.on("messageCreate", async (message) => {
 
   // SEND PANEL
   if (cmd === "sendpanel" && isStaff(message.member)) {
-    const embed = new EmbedBuilder()
-      .setColor("#2563eb")
-      .setTitle("🎟️ Support Tickets — Lake County Roleplay")
-      .setDescription(
-        "**Select a department below**\n\n• One issue per ticket\n• Do not ping staff\n• Be respectful"
-      );
+const embed = new EmbedBuilder()
+  .setColor("#2563eb")
+  .setTitle("🎟️ Lake County Roleplay — Support Center")
+  .setDescription(
+    "**Welcome to the Lake County Roleplay Support Center.**\n\n" +
+
+    "To ensure your request is handled as efficiently as possible, please select the **appropriate department** from the menu below.\n\n" +
+
+    "📌 **Ticket Guidelines**\n" +
+    "• Open **one ticket per issue**\n" +
+    "• Provide **clear and detailed information**\n" +
+    "• Remain **respectful and patient** while waiting for a response\n" +
+    "• **Do not ping staff** — your ticket will be handled in order\n\n" +
+
+    "⚠️ **Misuse of the ticket system may result in moderation action.**"
+  )
+  .setFooter({
+    text: "Lake County Roleplay • Support & Staff Services"
+  });
 
     const menu = new StringSelectMenuBuilder()
       .setCustomId("ticket_category")
@@ -357,12 +370,31 @@ client.on("interactionCreate", async (interaction) => {
 
     await channel.send({
       content: `<@${user.id}> <@&${SUPPORT_ROLE_ID}>`,
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#22c55e")
-          .setTitle("🎫 Ticket Created")
-          .setDescription("A staff member will assist you shortly.")
-      ],
+embeds: [
+  new EmbedBuilder()
+    .setColor("#22c55e")
+    .setTitle("🎫 Support Ticket Opened")
+    .setDescription(
+      "**Your ticket has been successfully created.**\n\n" +
+
+      "A member of our staff team will be with you shortly. To help us assist you as efficiently as possible, please provide the following information:\n\n" +
+
+      "📋 **What to Include**\n" +
+      "• A **clear and detailed description** of your issue\n" +
+      "• Any **relevant usernames, user IDs, or role names**\n" +
+      "• Screenshots, clips, or evidence if applicable\n\n" +
+
+      "⏳ **Important Notes**\n" +
+      "• Please remain **patient and respectful** while waiting\n" +
+      "• Do **not** ping staff — your ticket is already in the queue\n" +
+      "• Opening multiple tickets for the same issue may result in action\n\n" +
+
+      "Thank you for your cooperation."
+    )
+    .setFooter({
+      text: "Lake County Roleplay • Support Ticket System"
+    })
+],
       components: [buttons]
     });
 
