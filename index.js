@@ -1,3 +1,6 @@
+// =====================
+// IMPORTS
+// =====================
 const {
   Client,
   GatewayIntentBits,
@@ -8,7 +11,8 @@ const {
   ButtonStyle,
   StringSelectMenuBuilder
 } = require("discord.js");
-const Database = require("better-sqlite3");
+const fs = require("fs");
+const path = require("path");
 
 // =====================
 // CLIENT
@@ -43,52 +47,33 @@ const CATEGORIES = {
 };
 
 // =====================
-// DATABASE
+// DATA STORAGE (JSON)
 // =====================
-const db = new Database("./bot.db");
+const DATA_DIR = path.join(__dirname, "data");
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
-// Levels
-db.prepare(`
-CREATE TABLE IF NOT EXISTS levels (
-  userId TEXT PRIMARY KEY,
-  xp INTEGER,
-  level INTEGER,
-  lastXp INTEGER
-)`).run();
+const FILES = {
+  polls: "polls.json",
+  tickets: "tickets.json",
+  levels: "levels.json",
+  cases: "cases.json"
+};
 
-// Tickets
-db.prepare(`
-CREATE TABLE IF NOT EXISTS tickets (
-  channelId TEXT PRIMARY KEY,
-  ownerId TEXT,
-  claimedBy TEXT
-)`).run();
+for (const f of Object.values(FILES)) {
+  const p = path.join(DATA_DIR, f);
+  if (!fs.existsSync(p)) fs.writeFileSync(p, "{}");
+}
 
-// SSU polls
-db.prepare(`
-CREATE TABLE IF NOT EXISTS polls (
-  messageId TEXT PRIMARY KEY,
-  createdAt INTEGER
-)`).run();
+const load = (f) =>
+  JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), "utf8"));
+const save = (f, d) =>
+  fs.writeFileSync(path.join(DATA_DIR, f), JSON.stringify(d, null, 2));
 
-db.prepare(`
-CREATE TABLE IF NOT EXISTS poll_votes (
-  messageId TEXT,
-  userId TEXT,
-  vote TEXT,
-  PRIMARY KEY (messageId, userId)
-)`).run();
-
-// Moderation cases
-db.prepare(`
-CREATE TABLE IF NOT EXISTS cases (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  action TEXT,
-  target TEXT,
-  moderator TEXT,
-  reason TEXT,
-  time INTEGER
-)`).run();
+let polls = load(FILES.polls);
+let tickets = load(FILES.tickets);
+let levels = load(FILES.levels);
+let cases = load(FILES.cases);
+if (!cases.lastCase) cases.lastCase = 0;
 
 // =====================
 // HELPERS
@@ -96,9 +81,12 @@ CREATE TABLE IF NOT EXISTS cases (
 const isStaff = (m) => m.roles.cache.has(STAFF_ROLE_ID);
 
 async function resolveTarget(message) {
-  if (message.mentions.members.first()) return message.mentions.members.first();
+  if (message.mentions.members.first())
+    return message.mentions.members.first();
+
   const id = message.content.split(/\s+/)[1];
   if (!id) return null;
+
   try {
     return await message.guild.members.fetch(id);
   } catch {
@@ -106,11 +94,19 @@ async function resolveTarget(message) {
   }
 }
 
-function logCase(action, target, moderator, reason) {
-  db.prepare(`
-    INSERT INTO cases (action, target, moderator, reason, time)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(action, target, moderator, reason, Date.now());
+function createCase(action, target, moderator, reason) {
+  cases.lastCase++;
+  const id = cases.lastCase;
+
+  cases[id] = {
+    action,
+    target,
+    moderator,
+    reason,
+    time: Date.now()
+  };
+
+  save(FILES.cases, cases);
 
   const log = client.channels.cache.get(MOD_LOG_CHANNEL_ID);
   if (log) {
@@ -118,7 +114,7 @@ function logCase(action, target, moderator, reason) {
       embeds: [
         new EmbedBuilder()
           .setColor("#dc2626")
-          .setTitle("📁 Moderation Case")
+          .setTitle(`📁 Case #${id}`)
           .addFields(
             { name: "Action", value: action, inline: true },
             { name: "User", value: `<@${target}>`, inline: true },
@@ -142,38 +138,30 @@ function xpForLevel(lvl) {
   return Math.floor(100 * lvl * 1.5);
 }
 
-function addXP(message) {
+function addXP(userId) {
   const now = Date.now();
-  const userId = message.author.id;
 
-  let row = db.prepare(`SELECT * FROM levels WHERE userId=?`).get(userId);
-  if (!row) {
-    db.prepare(`INSERT INTO levels VALUES (?,0,1,0)`).run(userId);
-    return;
+  if (!levels[userId]) {
+    levels[userId] = { xp: 0, level: 1, last: 0 };
   }
 
-  if (now - row.lastXp < XP_COOLDOWN) return;
+  if (now - levels[userId].last < XP_COOLDOWN) return null;
 
-  let xp =
-    row.xp + Math.floor(Math.random() * (XP_MAX - XP_MIN + 1)) + XP_MIN;
-  let level = row.level;
+  const gain =
+    Math.floor(Math.random() * (XP_MAX - XP_MIN + 1)) + XP_MIN;
 
-  while (xp >= xpForLevel(level)) {
-    xp -= xpForLevel(level);
-    level++;
-    message.channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#facc15")
-          .setTitle("⬆️ Level Up!")
-          .setDescription(`${message.author} reached **Level ${level}**!`)
-      ]
-    });
+  levels[userId].xp += gain;
+  levels[userId].last = now;
+
+  let leveled = false;
+  while (levels[userId].xp >= xpForLevel(levels[userId].level)) {
+    levels[userId].xp -= xpForLevel(levels[userId].level);
+    levels[userId].level++;
+    leveled = true;
   }
 
-  db.prepare(
-    `UPDATE levels SET xp=?, level=?, lastXp=? WHERE userId=?`
-  ).run(xp, level, now, userId);
+  save(FILES.levels, levels);
+  return leveled ? levels[userId].level : null;
 }
 
 // =====================
@@ -189,13 +177,27 @@ client.once("ready", () => {
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
-  addXP(message);
+  const levelUp = addXP(message.author.id);
+  if (levelUp) {
+    message.channel.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#facc15")
+          .setTitle("⬆️ Level Up!")
+          .setDescription(
+            `${message.author} reached **Level ${levelUp}**!`
+          )
+      ]
+    });
+  }
 
   if (!message.content.startsWith(PREFIX)) return;
   const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
   const cmd = args.shift().toLowerCase();
 
+  // =====================
   // SEND TICKET PANEL
+  // =====================
   if (cmd === "sendpanel" && isStaff(message.member)) {
     const embed = new EmbedBuilder()
       .setColor("#2563eb")
@@ -220,7 +222,9 @@ client.on("messageCreate", async (message) => {
     });
   }
 
+  // =====================
   // SSU VOTE
+  // =====================
   if (cmd === "ssuvote" && isStaff(message.member)) {
     const embed = new EmbedBuilder()
       .setColor("#16a34a")
@@ -229,28 +233,40 @@ client.on("messageCreate", async (message) => {
       .setImage(SESSION_BANNER_URL);
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("poll_attend").setLabel("Attend").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("poll_cant").setLabel("Can’t Attend").setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId("poll_view").setLabel("👀 View Voters").setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder()
+        .setCustomId("poll_attend")
+        .setLabel("Attend (0/5)")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId("poll_cant")
+        .setLabel("Can’t Attend (0)")
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId("poll_view")
+        .setLabel("👀 View Voters")
+        .setStyle(ButtonStyle.Secondary)
     );
 
-    const msg = await message.channel.send({ embeds: [embed], components: [row] });
-    db.prepare(`INSERT INTO polls VALUES (?,?)`).run(msg.id, Date.now());
+    const msg = await message.channel.send({
+      embeds: [embed],
+      components: [row]
+    });
+
+    polls[msg.id] = { attend: [], cant: [] };
+    save(FILES.polls, polls);
   }
 
+  // =====================
   // SSU / SSD
+  // =====================
   if (cmd === "ssu" && isStaff(message.member)) {
-    const poll = db.prepare(
-      `SELECT messageId FROM polls ORDER BY createdAt DESC LIMIT 1`
-    ).get();
+    const poll = Object.values(polls).reverse()[0];
     if (!poll) return message.reply("❌ No SSU poll found.");
 
-    const voters = db.prepare(
-      `SELECT userId FROM poll_votes WHERE messageId=? AND vote='attend'`
-    ).all(poll.messageId).map(v => `<@${v.userId}>`).join(" ");
+    const mentions = poll.attend.map(id => `<@${id}>`).join(" ");
 
     message.channel.send({
-      content: `<@&${SSU_ROLE_PING}>\n${voters}`,
+      content: `<@&${SSU_ROLE_PING}>\n${mentions}`,
       embeds: [
         new EmbedBuilder()
           .setColor("#22c55e")
@@ -273,37 +289,41 @@ client.on("messageCreate", async (message) => {
     });
   }
 
+  // =====================
   // MODERATION
-  if (["warn","kick","ban","unban"].includes(cmd) && !isStaff(message.member)) return;
+  // =====================
+  if (["warn", "kick", "ban", "unban"].includes(cmd) && !isStaff(message.member))
+    return;
 
   if (cmd === "warn") {
     const target = await resolveTarget(message);
     if (!target) return message.reply("❌ User not found.");
-    logCase("Warn", target.id, message.author.id, args.join(" ") || "No reason");
+    const reason = args.join(" ") || "No reason provided";
+    createCase("Warn", target.id, message.author.id, reason);
     message.reply(`⚠️ Warned **${target.user.tag}**`);
   }
 
   if (cmd === "kick") {
     const target = await resolveTarget(message);
-    if (!target || !target.kickable) return message.reply("❌ Cannot kick user.");
+    if (!target || !target.kickable) return;
     await target.kick();
-    logCase("Kick", target.id, message.author.id, "Kicked");
+    createCase("Kick", target.id, message.author.id, "Kicked");
     message.reply(`👢 Kicked **${target.user.tag}**`);
   }
 
   if (cmd === "ban") {
     const target = await resolveTarget(message);
-    if (!target || !target.bannable) return message.reply("❌ Cannot ban user.");
+    if (!target || !target.bannable) return;
     await target.ban();
-    logCase("Ban", target.id, message.author.id, "Banned");
+    createCase("Ban", target.id, message.author.id, "Banned");
     message.reply(`🔨 Banned **${target.user.tag}**`);
   }
 
   if (cmd === "unban") {
     const uid = args[0];
-    if (!uid) return message.reply("❌ Provide user ID.");
+    if (!uid) return;
     await message.guild.members.unban(uid);
-    logCase("Unban", uid, message.author.id, "Unbanned");
+    createCase("Unban", uid, message.author.id, "Unbanned");
     message.reply(`✅ Unbanned <@${uid}>`);
   }
 });
@@ -313,7 +333,10 @@ client.on("messageCreate", async (message) => {
 // =====================
 client.on("interactionCreate", async (interaction) => {
   // Ticket creation
-  if (interaction.isStringSelectMenu() && interaction.customId === "ticket_category") {
+  if (
+    interaction.isStringSelectMenu() &&
+    interaction.customId === "ticket_category"
+  ) {
     const user = interaction.user;
     const key = interaction.values[0];
 
@@ -321,21 +344,46 @@ client.on("interactionCreate", async (interaction) => {
       name: `${user.username}-ticket`,
       parent: CATEGORIES[key],
       permissionOverwrites: [
-        { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-        { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-        { id: SUPPORT_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+        {
+          id: interaction.guild.id,
+          deny: [PermissionsBitField.Flags.ViewChannel]
+        },
+        {
+          id: user.id,
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages
+          ]
+        },
+        {
+          id: SUPPORT_ROLE_ID,
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages
+          ]
+        }
       ]
     });
 
-    db.prepare(`INSERT INTO tickets VALUES (?, ?, NULL)`).run(channel.id, user.id);
+    tickets[channel.id] = { owner: user.id, claimedBy: null };
+    save(FILES.tickets, tickets);
 
     const buttons = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("ticket_claim").setLabel("Claim").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("ticket_unclaim").setLabel("Unclaim").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("ticket_close").setLabel("Close").setStyle(ButtonStyle.Danger)
+      new ButtonBuilder()
+        .setCustomId("ticket_claim")
+        .setLabel("Claim")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId("ticket_unclaim")
+        .setLabel("Unclaim")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("ticket_close")
+        .setLabel("Close")
+        .setStyle(ButtonStyle.Danger)
     );
 
-    channel.send({
+    await channel.send({
       content: `<@${user.id}> <@&${SUPPORT_ROLE_ID}>`,
       embeds: [
         new EmbedBuilder()
@@ -346,65 +394,105 @@ client.on("interactionCreate", async (interaction) => {
       components: [buttons]
     });
 
-    interaction.reply({ content: "✅ Ticket created.", ephemeral: true });
+    return interaction.reply({
+      content: "✅ Ticket created.",
+      ephemeral: true
+    });
   }
 
   // Ticket buttons
-  if (interaction.isButton()) {
+  if (interaction.isButton() && tickets[interaction.channelId]) {
+    const ticket = tickets[interaction.channelId];
+
     if (interaction.customId === "ticket_claim") {
-      db.prepare(`UPDATE tickets SET claimedBy=? WHERE channelId=?`)
-        .run(interaction.user.id, interaction.channelId);
-      interaction.reply({ content: "✅ Ticket claimed.", ephemeral: true });
+      ticket.claimedBy = interaction.user.id;
+      save(FILES.tickets, tickets);
+      return interaction.reply({
+        content: "✅ Ticket claimed.",
+        ephemeral: true
+      });
     }
 
     if (interaction.customId === "ticket_unclaim") {
-      db.prepare(`UPDATE tickets SET claimedBy=NULL WHERE channelId=?`)
-        .run(interaction.channelId);
-      interaction.reply({ content: "ℹ️ Ticket unclaimed.", ephemeral: true });
+      ticket.claimedBy = null;
+      save(FILES.tickets, tickets);
+      return interaction.reply({
+        content: "ℹ️ Ticket unclaimed.",
+        ephemeral: true
+      });
     }
 
     if (interaction.customId === "ticket_close") {
-      db.prepare(`DELETE FROM tickets WHERE channelId=?`)
-        .run(interaction.channelId);
-      interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
+      delete tickets[interaction.channelId];
+      save(FILES.tickets, tickets);
+      await interaction.reply({
+        content: "🔒 Closing ticket...",
+        ephemeral: true
+      });
       setTimeout(() => interaction.channel.delete(), 3000);
     }
   }
 
   // SSU voting
-  if (interaction.isButton() && interaction.customId.startsWith("poll_")) {
+  if (interaction.isButton() && polls[interaction.message.id]) {
+    const poll = polls[interaction.message.id];
+    const uid = interaction.user.id;
+
     if (interaction.customId === "poll_view") {
-      const rows = db.prepare(
-        `SELECT * FROM poll_votes WHERE messageId=?`
-      ).all(interaction.message.id);
-
-      const attend = rows.filter(r => r.vote==="attend").map(r=>`<@${r.userId}>`).join("\n") || "None";
-      const cant = rows.filter(r => r.vote==="cant").map(r=>`<@${r.userId}>`).join("\n") || "None";
-
       return interaction.reply({
         ephemeral: true,
         embeds: [
           new EmbedBuilder()
             .setTitle("👀 Voters")
             .addFields(
-              { name: "Attend", value: attend },
-              { name: "Can’t Attend", value: cant }
+              {
+                name: "Attend",
+                value: poll.attend.map(id => `<@${id}>`).join("\n") || "None"
+              },
+              {
+                name: "Can’t Attend",
+                value: poll.cant.map(id => `<@${id}>`).join("\n") || "None"
+              }
             )
         ]
       });
     }
 
-    const vote =
-      interaction.customId === "poll_attend" ? "attend" :
-      interaction.customId === "poll_cant" ? "cant" : null;
+    if (interaction.customId === "poll_attend") {
+      poll.cant = poll.cant.filter(i => i !== uid);
+      if (!poll.attend.includes(uid)) poll.attend.push(uid);
+    }
 
-    if (!vote) return;
+    if (interaction.customId === "poll_cant") {
+      poll.attend = poll.attend.filter(i => i !== uid);
+      if (!poll.cant.includes(uid)) poll.cant.push(uid);
+    }
 
-    db.prepare(
-      `INSERT OR REPLACE INTO poll_votes VALUES (?,?,?)`
-    ).run(interaction.message.id, interaction.user.id, vote);
+    save(FILES.polls, polls);
 
-    interaction.reply({ content: "✅ Vote updated.", ephemeral: true });
+    await interaction.message.edit({
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId("poll_attend")
+            .setLabel(`Attend (${poll.attend.length}/5)`)
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId("poll_cant")
+            .setLabel(`Can’t Attend (${poll.cant.length})`)
+            .setStyle(ButtonStyle.Danger),
+          new ButtonBuilder()
+            .setCustomId("poll_view")
+            .setLabel("👀 View Voters")
+            .setStyle(ButtonStyle.Secondary)
+        )
+      ]
+    });
+
+    return interaction.reply({
+      content: "✅ Vote updated.",
+      ephemeral: true
+    });
   }
 });
 
