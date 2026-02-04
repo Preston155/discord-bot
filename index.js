@@ -190,12 +190,10 @@ client.on("guildMemberAdd", async (member) => {
   const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
   if (!channel) return;
 
-  const memberCount = member.guild.memberCount;
-
-  const messageText =
-    `👋 **Welcome ${member} to Lake County Roleplay!** ` +
-    `You are our **${memberCount}th member**, we hope you enjoy your stay!\n\n` +
-    `Ensure to verify to gain access to all of our channels and stop in-game Private Messages.`;
+  const message =
+    `👋🏽 \`\` - \`\` Welcome ${member} to **Lake County Roleplay!** ` +
+    `You are our **${member.guild.memberCount}** member, we hope you enjoy your stay!\n` +
+    `-# Ensure to verify to gain access to all of our channels and stop in-game Private Messages.`;
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -206,10 +204,11 @@ client.on("guildMemberAdd", async (member) => {
   );
 
   channel.send({
-    content: messageText,
+    content: message,
     components: [row]
   });
 });
+
 
 // =====================
 // MESSAGE CREATE
