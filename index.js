@@ -118,6 +118,7 @@ client.on("messageCreate", async (message) => {
             `🎉 ${message.author} leveled up!\n\n` +
             `**New Level:** ${newLevel}`
           )
+          .setFooter({ text: "Lake County Roleplay • Level System" })
       ]
     });
   }
@@ -135,12 +136,13 @@ client.on("messageCreate", async (message) => {
       embeds: [
         new EmbedBuilder()
           .setColor("#3498db")
-          .setTitle("📈 User Level")
+          .setTitle("📈 Level Information")
           .setDescription(
             `**User:** ${user}\n` +
             `**Level:** ${levels[user.id].level}\n` +
             `**XP:** ${levels[user.id].xp} / ${xpForLevel(levels[user.id].level)}`
           )
+          .setFooter({ text: "Lake County Roleplay • Level System" })
       ]
     });
   }
@@ -153,13 +155,19 @@ client.on("messageCreate", async (message) => {
       .setColor("#0ea5e9")
       .setTitle("🏛️ Lake County Roleplay | Support Center")
       .setDescription(
-        "Use the menu below to open a support ticket.\n\n" +
-        "• One issue per ticket\n• Be respectful\n• Do not ping staff"
-      );
+        "**Welcome to the official Lake County Roleplay support system.**\n\n" +
+        "Use the menu below to open a support ticket with our staff team.\n\n" +
+        "**📌 Rules:**\n" +
+        "• One issue per ticket\n" +
+        "• Be respectful\n" +
+        "• Do not ping staff\n\n" +
+        "🕒 Tickets are handled in order received."
+      )
+      .setFooter({ text: "Lake County Roleplay • Support System" });
 
     const menu = new StringSelectMenuBuilder()
       .setCustomId("ticket_category")
-      .setPlaceholder("Select a category…")
+      .setPlaceholder("Select a support category…")
       .addOptions(
         { label: "General Support", value: "general_support", emoji: "👥" },
         { label: "Partnership Support", value: "partnership_support", emoji: "🤝" },
@@ -182,14 +190,22 @@ client.on("messageCreate", async (message) => {
     }
 
     const embed = new EmbedBuilder()
-      .setColor("#22c55e")
-      .setTitle("📊 Session Attendance Poll")
+      .setColor("#16a34a")
+      .setTitle("🚨 Lake County Roleplay | Server Startup Vote")
       .setDescription(
-        "**Server Startup (SSU) Interest Check**\n\n" +
-        "Click below to indicate your availability.\n\n" +
-        "**Auto-starts at 5 Attend votes.**"
+        "**Server Startup (SSU) Availability Poll**\n\n" +
+        "This poll determines whether enough members are available to begin an **official Server Startup (SSU)**.\n\n" +
+        "**🗳️ How to Participate:**\n" +
+        "• Click **Attend** if you are available\n" +
+        "• Click **Can’t Attend** if unavailable\n" +
+        "• You may change or remove your vote at any time\n\n" +
+        "**📊 Requirements:**\n" +
+        "• **5 Attend votes** required\n" +
+        "• SSU auto-starts once met\n\n" +
+        "⚠️ Only vote if you plan to attend."
       )
-      .setImage(SESSION_BANNER_URL);
+      .setImage(SESSION_BANNER_URL)
+      .setFooter({ text: "Lake County Roleplay • Session Management" });
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("attend").setLabel("✅ Attend (0/5)").setStyle(ButtonStyle.Success),
