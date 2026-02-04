@@ -22,23 +22,13 @@ const client = new Client({
 // =====================
 const PREFIX = "!";
 const SUPPORT_ROLE_ID = "1282417060391161978";
-const SSU_PING_ROLE_ID = null; // null = @everyone
 
-const SESSION_BANNER_URL =
-  "https://media.discordapp.net/attachments/1452829338545160285/1466919030127591613/ILLEGAL_FIREARM_1.png";
-
-// Ticket Categories
 const CATEGORIES = {
   general_support: "1468276842942435338",
   partnership_support: "1461009005798359204",
   ia_support: "1468276930796327125",
   management_support: "1468277029865783489"
 };
-
-// =====================
-// SESSION POLL STORAGE
-// =====================
-const sessionPolls = new Map();
 
 // =====================
 // READY
@@ -174,7 +164,7 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     // =====================
-    // TICKET BUTTONS
+    // TICKET BUTTONS (FIXED EMBEDS)
     // =====================
     if (interaction.isButton() && ["claim", "unclaim", "close"].includes(interaction.customId)) {
       const channel = interaction.channel;
@@ -186,23 +176,24 @@ client.on("interactionCreate", async (interaction) => {
         return interaction.reply({ content: "❌ Staff only.", ephemeral: true });
       }
 
-      const topic = channel.topic || "CLAIMED:none";
-      const claimedId = topic.split(":")[1];
+      const claimedId = (channel.topic || "CLAIMED:none").split(":")[1];
 
       // CLAIM
       if (interaction.customId === "claim") {
         if (claimedId !== "none") {
-          return interaction.reply({ content: "❌ Already claimed.", ephemeral: true });
+          return interaction.reply({ content: "❌ Ticket already claimed.", ephemeral: true });
         }
 
         await channel.setTopic(`CLAIMED:${interaction.user.id}`);
 
-        const embed = EmbedBuilder.from(interaction.message.embeds[0])
+        const embed = new EmbedBuilder()
+          .setColor("#00b0f4")
+          .setTitle("🎟️ Support Ticket Claimed")
           .setDescription(
-            interaction.message.embeds[0].description.replace(
-              /\*\*Claimed By:\*\*.*$/,
-              `**Claimed By:** <@${interaction.user.id}>`
-            )
+            "**A staff member is now handling this ticket.**\n\n" +
+            `**Claimed By:** <@${interaction.user.id}>\n` +
+            "**Status:** 🟢 Claimed\n\n" +
+            "Please continue the discussion below."
           );
 
         await interaction.message.edit({ embeds: [embed] });
@@ -212,17 +203,19 @@ client.on("interactionCreate", async (interaction) => {
       // UNCLAIM
       if (interaction.customId === "unclaim") {
         if (claimedId !== interaction.user.id) {
-          return interaction.reply({ content: "❌ You did not claim this.", ephemeral: true });
+          return interaction.reply({ content: "❌ You did not claim this ticket.", ephemeral: true });
         }
 
         await channel.setTopic("CLAIMED:none");
 
-        const embed = EmbedBuilder.from(interaction.message.embeds[0])
+        const embed = new EmbedBuilder()
+          .setColor("#00b0f4")
+          .setTitle("🎟️ Support Ticket Opened")
           .setDescription(
-            interaction.message.embeds[0].description.replace(
-              /\*\*Claimed By:\*\*.*$/,
-              "**Claimed By:** ❌ Unclaimed"
-            )
+            "**This ticket is awaiting staff assignment.**\n\n" +
+            "**Status:** 🟡 Open\n" +
+            "**Claimed By:** ❌ Unclaimed\n\n" +
+            "A staff member will assist you shortly."
           );
 
         await interaction.message.edit({ embeds: [embed] });
