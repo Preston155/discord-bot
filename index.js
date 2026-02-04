@@ -10,9 +10,9 @@ const {
 } = require("discord.js");
 const Database = require("better-sqlite3");
 
-/* =====================
-   CLIENT
-===================== */
+// =====================
+// CLIENT
+// =====================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -22,9 +22,9 @@ const client = new Client({
   ]
 });
 
-/* =====================
-   CONFIG
-===================== */
+// =====================
+// CONFIG
+// =====================
 const PREFIX = "!";
 const STAFF_ROLE_ID = "1278100769626783837";
 const SUPPORT_ROLE_ID = "1282417060391161978";
@@ -42,9 +42,9 @@ const CATEGORIES = {
   management_support: "1468277029865783489"
 };
 
-/* =====================
-   DATABASE
-===================== */
+// =====================
+// DATABASE
+// =====================
 const db = new Database("./bot.db");
 
 // Levels
@@ -90,18 +90,15 @@ CREATE TABLE IF NOT EXISTS cases (
   time INTEGER
 )`).run();
 
-/* =====================
-   HELPERS
-===================== */
+// =====================
+// HELPERS
+// =====================
 const isStaff = (m) => m.roles.cache.has(STAFF_ROLE_ID);
 
 async function resolveTarget(message) {
-  if (message.mentions.members.first())
-    return message.mentions.members.first();
-
+  if (message.mentions.members.first()) return message.mentions.members.first();
   const id = message.content.split(/\s+/)[1];
   if (!id) return null;
-
   try {
     return await message.guild.members.fetch(id);
   } catch {
@@ -134,9 +131,9 @@ function logCase(action, target, moderator, reason) {
   }
 }
 
-/* =====================
-   LEVEL SYSTEM
-===================== */
+// =====================
+// LEVEL SYSTEM
+// =====================
 const XP_MIN = 10;
 const XP_MAX = 20;
 const XP_COOLDOWN = 60000;
@@ -150,7 +147,6 @@ function addXP(message) {
   const userId = message.author.id;
 
   let row = db.prepare(`SELECT * FROM levels WHERE userId=?`).get(userId);
-
   if (!row) {
     db.prepare(`INSERT INTO levels VALUES (?,0,1,0)`).run(userId);
     return;
@@ -175,21 +171,21 @@ function addXP(message) {
     });
   }
 
-  db.prepare(`
-    UPDATE levels SET xp=?, level=?, lastXp=? WHERE userId=?
-  `).run(xp, level, now, userId);
+  db.prepare(
+    `UPDATE levels SET xp=?, level=?, lastXp=? WHERE userId=?`
+  ).run(xp, level, now, userId);
 }
 
-/* =====================
-   READY
-===================== */
+// =====================
+// READY
+// =====================
 client.once("ready", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
-/* =====================
-   MESSAGE CREATE
-===================== */
+// =====================
+// MESSAGE CREATE
+// =====================
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
@@ -199,7 +195,7 @@ client.on("messageCreate", async (message) => {
   const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
   const cmd = args.shift().toLowerCase();
 
-  /* ----- TICKET PANEL ----- */
+  // SEND TICKET PANEL
   if (cmd === "sendpanel" && isStaff(message.member)) {
     const embed = new EmbedBuilder()
       .setColor("#2563eb")
@@ -218,13 +214,13 @@ client.on("messageCreate", async (message) => {
         { label: "Management", value: "management_support", emoji: "👑" }
       );
 
-    message.channel.send({
+    return message.channel.send({
       embeds: [embed],
       components: [new ActionRowBuilder().addComponents(menu)]
     });
   }
 
-  /* ----- SSU VOTE ----- */
+  // SSU VOTE
   if (cmd === "ssuvote" && isStaff(message.member)) {
     const embed = new EmbedBuilder()
       .setColor("#16a34a")
@@ -242,7 +238,7 @@ client.on("messageCreate", async (message) => {
     db.prepare(`INSERT INTO polls VALUES (?,?)`).run(msg.id, Date.now());
   }
 
-  /* ----- SSU / SSD ----- */
+  // SSU / SSD
   if (cmd === "ssu" && isStaff(message.member)) {
     const poll = db.prepare(
       `SELECT messageId FROM polls ORDER BY createdAt DESC LIMIT 1`
@@ -277,7 +273,7 @@ client.on("messageCreate", async (message) => {
     });
   }
 
-  /* ----- MODERATION ----- */
+  // MODERATION
   if (["warn","kick","ban","unban"].includes(cmd) && !isStaff(message.member)) return;
 
   if (cmd === "warn") {
@@ -312,9 +308,9 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-/* =====================
-   INTERACTIONS
-===================== */
+// =====================
+// INTERACTIONS
+// =====================
 client.on("interactionCreate", async (interaction) => {
   // Ticket creation
   if (interaction.isStringSelectMenu() && interaction.customId === "ticket_category") {
@@ -412,7 +408,7 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-/* =====================
-   LOGIN
-===================== */
+// =====================
+// LOGIN
+// =====================
 client.login(process.env.TOKEN);
