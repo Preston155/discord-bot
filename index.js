@@ -1,6 +1,6 @@
-// ================================
+// =====================
 // IMPORTS
-// ================================
+// =====================
 const {
   Client,
   GatewayIntentBits,
@@ -14,9 +14,9 @@ const {
 const fs = require("fs");
 const path = require("path");
 
-// ================================
+// =====================
 // CLIENT
-// ================================
+// =====================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -26,9 +26,9 @@ const client = new Client({
   ]
 });
 
-// ================================
+// =====================
 // CONFIG
-// ================================
+// =====================
 const PREFIX = "!";
 const SUPPORT_ROLE_ID = "1282417060391161978";
 const SSU_ROLE_PING = "1468213717035384882";
@@ -45,9 +45,9 @@ const CATEGORIES = {
   management_support: "1468277029865783489"
 };
 
-// ================================
+// =====================
 // DATA FILES
-// ================================
+// =====================
 const DATA_DIR = path.join(__dirname, "data");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
@@ -65,7 +65,8 @@ for (const f of Object.values(FILES)) {
 }
 
 const load = (f) => JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), "utf8"));
-const save = (f, d) => fs.writeFileSync(path.join(DATA_DIR, f), JSON.stringify(d, null, 2));
+const save = (f, d) =>
+  fs.writeFileSync(path.join(DATA_DIR, f), JSON.stringify(d, null, 2));
 
 let polls = load(FILES.polls);
 let tickets = load(FILES.tickets);
@@ -74,9 +75,9 @@ let moderation = load(FILES.moderation);
 let cases = load(FILES.cases);
 if (!cases.lastCase) cases.lastCase = 0;
 
-// ================================
-// CASE HANDLER
-// ================================
+// =====================
+// CASE CREATOR
+// =====================
 function createCase(action, target, moderator, reason) {
   cases.lastCase++;
   const id = cases.lastCase;
@@ -102,22 +103,15 @@ function createCase(action, target, moderator, reason) {
     )
     .setTimestamp();
 
-  const channel = client.channels.cache.get(MOD_LOG_CHANNEL_ID);
-  if (channel) channel.send({ embeds: [embed] });
+  const ch = client.channels.cache.get(MOD_LOG_CHANNEL_ID);
+  if (ch) ch.send({ embeds: [embed] });
 
   return id;
 }
 
-// ================================
-// READY
-// ================================
-client.once("ready", () => {
-  console.log(`✅ Logged in as ${client.user.tag}`);
-});
-
-// ================================
+// =====================
 // LEVEL SYSTEM
-// ================================
+// =====================
 const XP_MIN = 10;
 const XP_MAX = 20;
 const XP_COOLDOWN = 60_000;
@@ -135,20 +129,27 @@ function addXP(id) {
   levels[id].xp += gain;
   levels[id].last = now;
 
-  let up = false;
+  let leveled = false;
   while (levels[id].xp >= xpForLevel(levels[id].level)) {
     levels[id].xp -= xpForLevel(levels[id].level);
     levels[id].level++;
-    up = true;
+    leveled = true;
   }
 
   save(FILES.levels, levels);
-  return up ? levels[id].level : null;
+  return leveled ? levels[id].level : null;
 }
 
-// ================================
+// =====================
+// READY
+// =====================
+client.once("ready", () => {
+  console.log(`✅ Logged in as ${client.user.tag}`);
+});
+
+// =====================
 // MESSAGE CREATE
-// ================================
+// =====================
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
@@ -156,10 +157,12 @@ client.on("messageCreate", async (message) => {
   const lvl = addXP(message.author.id);
   if (lvl) {
     message.channel.send({
-      embeds: [new EmbedBuilder()
-        .setColor("#facc15")
-        .setTitle("⬆️ Level Up!")
-        .setDescription(`${message.author} reached **Level ${lvl}**!`)]
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#facc15")
+          .setTitle("⬆️ Level Up!")
+          .setDescription(`${message.author} reached **Level ${lvl}**!`)
+      ]
     });
   }
 
@@ -167,52 +170,155 @@ client.on("messageCreate", async (message) => {
   const args = message.content.slice(PREFIX.length).split(/ +/);
   const cmd = args.shift().toLowerCase();
 
-  // ================================
-  // MODERATION COMMANDS
-  // ================================
-  if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) return;
+  // =====================
+  // LEVEL
+  // =====================
+  if (cmd === "level") {
+    const u = message.mentions.users.first() || message.author;
+    if (!levels[u.id]) levels[u.id] = { xp: 0, level: 1 };
+    return message.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#3b82f6")
+          .setTitle("📈 Level")
+          .setDescription(
+            `**User:** ${u}\n**Level:** ${levels[u.id].level}\n**XP:** ${levels[u.id].xp}/${xpForLevel(levels[u.id].level)}`
+          )
+      ]
+    });
+  }
 
-  const target = message.mentions.members.first();
-  const reason = args.slice(1).join(" ") || "No reason provided";
+  // =====================
+  // MODERATION
+  // =====================
+  if (cmd === "warn") {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers))
+      return message.reply("❌ No permission.");
 
-  if (cmd === "warn" && target) {
+    const target = message.mentions.members.first();
+    if (!target) return message.reply("❌ Mention a user.");
+    const reason = args.slice(1).join(" ") || "No reason provided";
+
     if (!moderation[target.id]) moderation[target.id] = [];
     moderation[target.id].push({ reason, mod: message.author.id, time: Date.now() });
     save(FILES.moderation, moderation);
 
     const id = createCase("Warning", target.id, message.author.id, reason);
-    return message.reply(`⚠️ Warning issued (Case #${id})`);
+    return message.reply(`⚠️ Warning issued. **Case #${id}**`);
   }
 
-  if (cmd === "kick" && target) {
+  if (cmd === "warnings") {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers))
+      return message.reply("❌ No permission.");
+
+    const target = message.mentions.members.first();
+    if (!target) return message.reply("❌ Mention a user.");
+
+    const warns = moderation[target.id] || [];
+    if (!warns.length) return message.reply("✅ No warnings.");
+
+    return message.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#f59e0b")
+          .setTitle(`⚠️ Warnings for ${target.user.tag}`)
+          .setDescription(warns.map((w, i) => `**${i + 1}.** ${w.reason}`).join("\n"))
+      ]
+    });
+  }
+
+  if (cmd === "clearwarnings") {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
+      return message.reply("❌ Admin only.");
+
+    const target = message.mentions.members.first();
+    if (!target) return message.reply("❌ Mention a user.");
+
+    moderation[target.id] = [];
+    save(FILES.moderation, moderation);
+    return message.reply("✅ Warnings cleared.");
+  }
+
+  if (cmd === "kick") {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.KickMembers))
+      return message.reply("❌ No permission.");
+
+    const target = message.mentions.members.first();
+    if (!target) return message.reply("❌ Mention a user.");
+    const reason = args.slice(1).join(" ") || "No reason provided";
+
     await target.kick(reason);
     const id = createCase("Kick", target.id, message.author.id, reason);
-    return message.reply(`👢 User kicked (Case #${id})`);
+    return message.reply(`👢 User kicked. **Case #${id}**`);
   }
 
-  if (cmd === "ban" && target) {
+  if (cmd === "ban") {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.BanMembers))
+      return message.reply("❌ No permission.");
+
+    const target = message.mentions.members.first();
+    if (!target) return message.reply("❌ Mention a user.");
+    const reason = args.slice(1).join(" ") || "No reason provided";
+
     await target.ban({ reason });
     const id = createCase("Ban", target.id, message.author.id, reason);
-    return message.reply(`🔨 User banned (Case #${id})`);
+    return message.reply(`🔨 User banned. **Case #${id}**`);
   }
 
-  if (cmd === "timeout" && target) {
+  if (cmd === "unban") {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.BanMembers))
+      return message.reply("❌ No permission.");
+
+    const userId = args[0];
+    if (!userId) return message.reply("❌ Provide user ID.");
+
+    await message.guild.members.unban(userId);
+    const id = createCase("Unban", userId, message.author.id, "Unbanned");
+    return message.reply(`✅ User unbanned. **Case #${id}**`);
+  }
+
+  if (cmd === "timeout") {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers))
+      return message.reply("❌ No permission.");
+
+    const target = message.mentions.members.first();
     const minutes = parseInt(args[1]);
-    if (!minutes) return message.reply("❌ Provide minutes.");
+    if (!target || !minutes)
+      return message.reply("❌ Usage: !timeout @user <minutes>");
+
+    const reason = args.slice(2).join(" ") || "No reason provided";
     await target.timeout(minutes * 60_000, reason);
+
     const id = createCase("Timeout", target.id, message.author.id, reason);
-    return message.reply(`⏳ Timeout applied (Case #${id})`);
+    return message.reply(`⏳ Timeout applied. **Case #${id}**`);
+  }
+
+  if (cmd === "untimeout") {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers))
+      return message.reply("❌ No permission.");
+
+    const target = message.mentions.members.first();
+    if (!target) return message.reply("❌ Mention a user.");
+
+    await target.timeout(null);
+    const id = createCase("Untimeout", target.id, message.author.id, "Timeout removed");
+    return message.reply(`✅ Timeout removed. **Case #${id}**`);
   }
 
   if (cmd === "purge") {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.ManageMessages))
+      return message.reply("❌ No permission.");
+
     const amount = parseInt(args[0]);
-    if (!amount || amount > 100) return message.reply("❌ Max 100 messages.");
+    if (!amount || amount < 1 || amount > 100)
+      return message.reply("❌ 1–100 only.");
+
     await message.channel.bulkDelete(amount, true);
     return message.channel.send(`🧹 Deleted ${amount} messages.`);
   }
 });
 
-// ================================
+// =====================
 // LOGIN
-// ================================
+// =====================
 client.login(process.env.TOKEN);
