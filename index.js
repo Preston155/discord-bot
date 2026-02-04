@@ -402,31 +402,82 @@ embeds: [
   }
 
   // Ticket buttons (STAFF ONLY)
-  if (interaction.isButton() && tickets[interaction.channelId]) {
-    if (!isStaff(interaction.member)) {
-      return interaction.reply({ content: "❌ Staff only.", ephemeral: true });
-    }
-
-    const ticket = tickets[interaction.channelId];
-
-    if (interaction.customId === "ticket_claim") {
-      ticket.claimedBy = interaction.user.id;
-    }
-
-    if (interaction.customId === "ticket_unclaim") {
-      ticket.claimedBy = null;
-    }
-
-    if (interaction.customId === "ticket_close") {
-      delete tickets[interaction.channelId];
-      save(FILES.tickets, tickets);
-      await interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
-      return setTimeout(() => interaction.channel.delete(), 3000);
-    }
-
-    save(FILES.tickets, tickets);
-    return interaction.reply({ content: "✅ Updated.", ephemeral: true });
+if (interaction.isButton() && tickets[interaction.channelId]) {
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({ content: "❌ Staff only.", ephemeral: true });
   }
+
+  const ticket = tickets[interaction.channelId];
+
+  // CLAIM
+  if (interaction.customId === "ticket_claim") {
+    ticket.claimedBy = interaction.user.id;
+    save(FILES.tickets, tickets);
+
+    await interaction.channel.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#3b82f6")
+          .setTitle("📌 Ticket Claimed")
+          .setDescription(
+            `This ticket has been claimed by ${interaction.user}.\n\n` +
+            "They will be assisting with this request."
+          )
+          .setFooter({
+            text: "Lake County Roleplay • Ticket System"
+          })
+      ]
+    });
+
+    return interaction.reply({ content: "✅ Ticket claimed.", ephemeral: true });
+  }
+
+  // UNCLAIM
+  if (interaction.customId === "ticket_unclaim") {
+    ticket.claimedBy = null;
+    save(FILES.tickets, tickets);
+
+    await interaction.channel.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#f59e0b")
+          .setTitle("📍 Ticket Unclaimed")
+          .setDescription(
+            "This ticket is no longer claimed and is now available for staff."
+          )
+          .setFooter({
+            text: "Lake County Roleplay • Ticket System"
+          })
+      ]
+    });
+
+    return interaction.reply({ content: "ℹ️ Ticket unclaimed.", ephemeral: true });
+  }
+
+  // CLOSE
+  if (interaction.customId === "ticket_close") {
+    delete tickets[interaction.channelId];
+    save(FILES.tickets, tickets);
+
+    await interaction.channel.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#dc2626")
+          .setTitle("🔒 Ticket Closing")
+          .setDescription(
+            `This ticket has been closed by ${interaction.user}.\n\n` +
+            "The channel will be deleted shortly."
+          )
+          .setFooter({
+            text: "Lake County Roleplay • Ticket System"
+          })
+      ]
+    });
+
+    await interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
+    return setTimeout(() => interaction.channel.delete(), 3000);
+  }
+}
 
   // SSU voting (TOGGLE + AUTO)
   if (interaction.isButton() && polls[interaction.message.id]) {
